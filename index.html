@@ -462,6 +462,7 @@ function showRequestModal(r) {
   var title = isEdit ? "✏️ Редагувати запит" : "➕ Новий запит";
   var today = new Date().toLocaleDateString("uk-UA");
   var num = isEdit ? (r.req_num||"") : genReqNum();
+  var autoOid = isEdit ? (r.order_id||"") : ("ЗЕД-" + num);
 
   var html = "<div class='modal-bg' id='req-modal'><div class='modal'>"
     + "<div class='modal-title'>" + title + "</div>"
@@ -488,7 +489,7 @@ function showRequestModal(r) {
     + "<div class='field'><label>СТАТУС</label><select id='rf-status'>"
     + REQ_STATUSES.map(function(s){return "<option" + ((isEdit&&r.status===s)?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select></div>"
-    + "<div class='field'><label>ORDER ID</label><input id='rf-oid' value='" + escQ(isEdit ? (r.order_id||"") : "") + "' placeholder='ЗЕД-23-06-01'></div>"
+    + "<div class='field'><label>ORDER ID</label><input id='rf-oid' value='" + escQ(autoOid) + "' placeholder='ЗЕД-23-06-01'></div>"
     + "</div>"
     + "<div class='form-grid full'>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ КЛІЄНТА (OneDrive)</label><input id='rf-docs' value='" + escQ(isEdit ? (r.docs||"") : "") + "' placeholder='https://...'></div>"
