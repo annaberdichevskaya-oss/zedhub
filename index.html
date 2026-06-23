@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ZED Hub</title>
-<script src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1a1a2e;min-height:100vh}
@@ -23,7 +22,7 @@ header{background:#1a1a2e;padding:12px 20px;display:flex;align-items:center;just
 .tab-btn.active{color:#1a1a2e;border-bottom-color:#f59e0b;font-weight:600}
 .tab-count{background:#f3f4f6;color:#6b7280;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px}
 .tab-count.orange{background:#fef3c7;color:#d97706}
-.content{padding:16px 20px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.content{padding:16px 20px;overflow-x:auto}
 .toolbar{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
 .search-box{flex:1;min-width:180px;border:1px solid #e5e7eb;border-radius:8px;padding:7px 12px;font-size:13px;outline:none;font-family:inherit;background:#fff}
 .search-box:focus{border-color:#f59e0b}
@@ -89,22 +88,9 @@ tr:hover td{background:#fafafa}
 select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;outline:none;font-family:inherit;padding:2px 0;width:100%}
 .tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;background:#f3f4f6;color:#6b7280}
 @media(max-width:700px){.stats-bar{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr}.content{padding:10px 12px}}
-.client-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.client-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 18px;transition:box-shadow .2s}
-.client-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08)}
-.cc-name{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px}
-.cc-company{font-size:12px;color:#6b7280;margin-bottom:10px}
-.cc-emails{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
-.cc-email{font-size:12px;color:#3b82f6;display:flex;align-items:center;gap:6px}
-.cc-email a{color:#3b82f6;text-decoration:none}
-.cc-email a:hover{text-decoration:underline}
-.cc-actions{display:flex;gap:6px;border-top:1px solid #f3f4f6;padding-top:10px;margin-top:4px}
-.cc-tag{font-size:10px;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:#475569}
-
 </style>
 </head>
 <body>
-
 
 <header>
   <div class="logo">
@@ -115,16 +101,9 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
     </div>
   </div>
   <div class="hbtns">
-    <button class="hbtn" onclick="importExcel()">📥 Імпорт Excel</button>
-    <button class="hbtn" onclick="importRejestr()">📥 Імпорт CSV</button>
-    <button class="hbtn" onclick="importRejestrXlsx()">📥 Імпорт Excel Реєстру</button>
-    <input type="file" id="rejestr-xlsx-inp" accept=".xlsx,.xls" style="display:none" onchange="handleRejestrXlsx(this.files[0])">
-    <input type="file" id="rejestr-inp" accept=".csv" style="display:none" onchange="handleRejestr(this.files[0])">
-    <input type="file" id="excel-inp" accept=".xlsx,.xls" style="display:none" onchange="handleExcel(this.files[0])">
-    <button class="hbtn" onclick="exportBackup()">📤 Експорт даних</button>
-    <button class="hbtn" style="color:#ef4444;border-color:#ef444440" onclick="clearAllData()">🗑 Очистити</button>
+    <button class="hbtn" onclick="exportBackup()">💾 Бекап</button>
     <input type="file" id="restore-inp" accept=".json" style="display:none" onchange="restoreBackup(this.files[0])">
-    <button class="hbtn" onclick="document.getElementById('restore-inp').click()">📥 Імпорт даних</button>
+    <button class="hbtn" onclick="document.getElementById('restore-inp').click()">📂 Відновити</button>
     <button class="hbtn primary" onclick="openAddRequest()">+ Запит</button>
   </div>
 </header>
@@ -135,9 +114,6 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   </button>
   <button class="tab-btn" id="tab-ord" onclick="switchTab('orders')">
     🔖 Ордери <span class="tab-count" id="cnt-ord">0</span>
-  </button>
-  <button class="tab-btn" id="tab-cli" onclick="switchTab('clients')">
-    👥 Клієнти <span class="tab-count" id="cnt-cli">0</span>
   </button>
 </div>
 
@@ -183,46 +159,61 @@ function delivPill(s) {
 }
 
 // ── Data ────────────────────────────────────────────────────────
-function getSampleRequests() { return []; }
-function getSampleOrders() { return []; }
-
-var db = {requests: [], orders: [], clients: []};
-var _saveTimer = null;
-
-// Local Storage only — instant, no network
-var LS_KEY = "zedhub_v2_cache";
-var _saveTimer = null;
-
-function save() {
-  updateCounts();
-  try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
-}
-
-function initDb() {
-  showLoading(false);
+function loadData() {
   try {
-    var cached = localStorage.getItem(LS_KEY);
-    if (cached) {
-      var d = JSON.parse(cached);
-      if (d && d.requests) {
-        if (!d.clients) d.clients = [];
-        db = d;
-      }
+    var s = localStorage.getItem("zedhub_v1");
+    if (s) {
+      var d = JSON.parse(s);
+      if (d && d.requests) return d;
     }
   } catch(e) {}
-  render();
-  updateCounts();
+  return {requests: getSampleRequests(), orders: getSampleOrders()};
 }
 
-function showLoading(on) {
-  var el = document.getElementById("loading-overlay");
-  if (el) el.style.display = on ? "flex" : "none";
+function getSampleRequests() {
+  return [
+    {id:1, date:"03.06.2026", client:"ТОВ «Агро Трейд»", contact:"Петренко О.В.", route:"Китай → Київ", type:"Море", cargo:"Електроніка", weight:"5т / 20FCL", sum_log:45000, sum_brok:12000, status:"Accepted", order_id:"ZED-2026-001", docs:"", comment:"VIP клієнт"},
+    {id:2, date:"04.06.2026", client:"ТОВ «Хімімпекс»", contact:"Коваленко Б.П.", route:"Польща → Харків", type:"Авто", cargo:"Хімікати", weight:"15т", sum_log:32000, sum_brok:8500, status:"Accepted", order_id:"ZED-2026-002", docs:"", comment:"Спецдозвіл"},
+    {id:3, date:"05.06.2026", client:"ФОП Мельник А.Р.", contact:"Мельник А.Р.", route:"Туреччина → Дніпро", type:"Комбіноване", cargo:"Текстиль", weight:"3т", sum_log:18000, sum_brok:5000, status:"Прораховується", order_id:"", docs:"", comment:"Клієнт підтверджує"},
+    {id:4, date:"06.06.2026", client:"ТОВ «Будплюс»", contact:"Іваненко С.М.", route:"Німеччина → Київ", type:"Авто", cargo:"Будматеріали", weight:"20т", sum_log:28000, sum_brok:7000, status:"На погодженні", order_id:"", docs:"", comment:""},
+    {id:5, date:"07.06.2026", client:"ФОП Коваль В.", contact:"Коваль В.", route:"Китай → Одеса", type:"Море", cargo:"Одяг", weight:"2т", sum_log:15000, sum_brok:4000, status:"Rejected", order_id:"", docs:"", comment:"Знайшли дешевше"}
+  ];
+}
+
+function getSampleOrders() {
+  return [
+    {id:1, order_id:"ZED-2026-001", client:"ТОВ «Агро Трейд»", route:"Китай → Київ", req_id:"03-06-01", date:"03.06.2026",
+     incoterms:"CIF", booking:"COSCO-BK-4412", carrier:"COSCO Shipping", container:"TCKU3456789",
+     cutoff:"10.06.2026", route_full:"Shanghai → Одеса", etd:"10.06.2026", eta:"25.06.2026",
+     bol:"Оригінал отримано", cargo_status:"В морі", decl:"UA-2026-4412",
+     customs_status:"Розмитнено", customs_date:"28.06.2026",
+     resort:"Не потрібно", resort_addr:"", resort_comment:"",
+     logist_ua:"Коваль М.", transport_ua:"MAN TGX АА1234ВВ", delivery_status:"В дорозі", delivery_date:"02.07.2026",
+     invoice_sum:57000, payment_status:"Виставлено", payment_date:"",
+     docs:"", notes:"VIP клієнт"},
+    {id:2, order_id:"ZED-2026-002", client:"ТОВ «Хімімпекс»", route:"Польща → Харків", req_id:"04-06-02", date:"04.06.2026",
+     incoterms:"DAP", booking:"DAF-BK-7788", carrier:"DAF Transport", container:"",
+     cutoff:"05.06.2026", route_full:"Варшава → Харків", etd:"05.06.2026", eta:"07.06.2026",
+     bol:"Підтверджено", cargo_status:"В дорозі", decl:"UA-2026-4398",
+     customs_status:"На митниці", customs_date:"",
+     resort:"Не потрібно", resort_addr:"", resort_comment:"",
+     logist_ua:"Бойко Р.", transport_ua:"DAF XF АС9012ДД", delivery_status:"Очікує", delivery_date:"",
+     invoice_sum:40500, payment_status:"Очікує від фін відділу", payment_date:"",
+     docs:"", notes:"Спецдозвіл на хімію"}
+  ];
+}
+
+var db = loadData();
+
+function save() {
+  try { localStorage.setItem("zedhub_v1", JSON.stringify(db)); } catch(e) {}
+  updateCounts();
 }
 
 function updateCounts() {
+  var active = db.requests.filter(function(r){return r.status !== "Rejected";}).length;
   document.getElementById("cnt-req").textContent = db.requests.length;
   document.getElementById("cnt-ord").textContent = db.orders.length;
-  document.getElementById("cnt-cli").textContent = (db.clients||[]).length;
 }
 
 function exportBackup() {
@@ -253,22 +244,18 @@ function restoreBackup(file) {
 var currentTab = "requests";
 var reqSearch = "";
 var reqFilter = "";
-var reqSort = "new";
 var ordSearch = "";
-var ordSort = "new";
 
 function switchTab(tab) {
   currentTab = tab;
   document.getElementById("tab-req").classList.toggle("active", tab === "requests");
   document.getElementById("tab-ord").classList.toggle("active", tab === "orders");
-  document.getElementById("tab-cli").classList.toggle("active", tab === "clients");
   render();
 }
 
 function render() {
   if (currentTab === "requests") renderRequests();
-  else if (currentTab === "orders") renderOrders();
-  else renderClients();
+  else renderOrders();
 }
 
 // ── REQUESTS ─────────────────────────────────────────────────────
@@ -278,10 +265,6 @@ function renderRequests() {
     var matchQ = !q || r.client.toLowerCase().indexOf(q) >= 0 || r.route.toLowerCase().indexOf(q) >= 0 || (r.cargo||"").toLowerCase().indexOf(q) >= 0;
     var matchF = !reqFilter || r.status === reqFilter;
     return matchQ && matchF;
-  });
-  filtered.sort(function(a,b){
-    var da = (a.req_num||""), db_ = (b.req_num||"");
-    return reqSort === "new" ? db_.localeCompare(da) : da.localeCompare(db_);
   });
 
   var accepted = db.requests.filter(function(r){return r.status==="Accepted";}).length;
@@ -301,7 +284,6 @@ function renderRequests() {
     + "<option value=''>Всі статуси</option>"
     + REQ_STATUSES.map(function(s){return "<option value='" + s + "'" + (reqFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select>"
-    + "<button class='btn btn-gray' onclick='reqSort=reqSort==="new"?"old":"new";renderRequests()' title='Сортування за датою'>" + (reqSort==="new" ? "↓ Новіші" : "↑ Старіші") + "</button>"
     + "<button class='btn btn-yellow' onclick='openAddRequest()'>+ Новий запит</button>"
     + "</div>";
 
@@ -311,7 +293,7 @@ function renderRequests() {
     return;
   }
 
-  html += "<div><table style='min-width:900px'><thead><tr>"
+  html += "<div style='overflow-x:auto'><table><thead><tr>"
     + "<th>№ ЗАПИТУ</th><th>ДАТА</th><th class='col-client'>КЛІЄНТ</th><th class='col-route'>МАРШРУТ / ТИП</th>"
     + "<th>ВАНТАЖ</th><th class='col-sum'>СУМА ₴</th><th class='col-status'>СТАТУС</th>"
     + "<th class='col-id'>ORDER ID</th><th>ДІЇ</th>"
@@ -349,10 +331,6 @@ function renderOrders() {
     var q = ordSearch.toLowerCase();
     return !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route||"").toLowerCase().indexOf(q) >= 0;
   });
-  filtered.sort(function(a,b){
-    var da = (a.order_id||""), db_ = (b.order_id||"");
-    return ordSort === "new" ? db_.localeCompare(da) : da.localeCompare(db_);
-  });
 
   var inTransit = db.orders.filter(function(o){return o.cargo_status==="В морі"||o.cargo_status==="В дорозі";}).length;
   var atCustoms = db.orders.filter(function(o){return o.customs_status==="На митниці"||o.customs_status==="Митний огляд";}).length;
@@ -368,7 +346,6 @@ function renderOrders() {
 
   html += "<div class='toolbar'>"
     + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + ordSearch + "' oninput='ordSearch=this.value;renderOrders()'>"
-    + "<button class='btn btn-gray' onclick='ordSort=ordSort==="new"?"old":"new";renderOrders()' title='Сортування за датою'>" + (ordSort==="new" ? "↓ Новіші" : "↑ Старіші") + "</button>"
     + "<button class='btn btn-yellow' onclick='openAddOrder()'>+ Новий ордер</button>"
     + "</div>";
 
@@ -378,16 +355,16 @@ function renderOrders() {
     return;
   }
 
-  html += "<div><table style='min-width:900px'><thead><tr>"
+  html += "<div style='overflow-x:auto'><table><thead><tr>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>ІНКОТЕРМС</th><th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
     + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МИТНИЦЯ</th>"
-    + "<th>ДОСТАВКА UA</th><th class='col-sum'>ІНВОЙС ₴</th><th>ОПЛАТА</th><th>📁 ДОКУМЕНТИ</th><th>✉️ EMAIL</th><th>ДІЇ</th>"
+    + "<th>ДОСТАВКА UA</th><th class='col-sum'>ІНВОЙС ₴</th><th>ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
     html += "<tr>"
-      + "<td><div class='order-id'>" + o.order_id + "</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>" + (o.date||"") + "</div></td>"
+      + "<td><div class='order-id'>" + o.order_id + "</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>" + (o.req_id||"") + " &bull; " + (o.date||"") + "</div></td>"
       + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + o.client + "</div><div style='font-size:10px;color:#6b7280'>" + (o.route||"") + "</div></td>"
       + "<td><span class='tag'>" + (o.incoterms||"—") + "</span></td>"
       + "<td><div style='font-size:11px'>" + (o.booking||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + (o.container||"") + "</div></td>"
@@ -399,23 +376,18 @@ function renderOrders() {
       + "<td class='col-sum' style='font-weight:600;font-size:12px'>" + (o.invoice_sum||0).toLocaleString("uk-UA") + "</td>"
       + "<td>" + payPill(o.payment_status) + "</td>"
       + "<td style='text-align:center'>"
-      + (o.docs ? "<a href='" + o.docs + "' target='_blank' style='color:#f59e0b;font-size:18px;text-decoration:none'>📁</a>" : "<span style='color:#d1d5db'>—</span>")
+      + (o.docs ? "<a href='" + o.docs + "' target='_blank' style='color:#f59e0b;font-size:16px;text-decoration:none'>📁</a>" : "<span style='color:#d1d5db'>—</span>")
       + "</td>"
       + "<td style='text-align:center'>"
-      + (function() {
-          var clientName = (o.client||"").trim().toLowerCase();
-          var cli = (db.clients||[]).find(function(c){ return (c.name||"").trim().toLowerCase() === clientName; });
-          var emails = cli && cli.emails && cli.emails.length ? cli.emails : [];
-          var email = emails.join(",");
-          var subj = encodeURIComponent("Ордер " + o.order_id + " — статус вантажу");
-          var body = encodeURIComponent("Шановний клієнте,\n\nПо ордеру " + o.order_id + ":\nСтатус вантажу: " + (o.cargo_status||"—") + "\nСтатус доставки: " + (o.delivery_status||"—") + "\n\nZ повагою,\nZED Logistics");
+      + (function(){
+          var cli = (db.clients||[]).find(function(c){ return (c.name||"").trim().toLowerCase()===(o.client||"").trim().toLowerCase(); });
+          var email = cli && cli.emails && cli.emails.length ? cli.emails.join(",") : "";
           if (email) {
-            var mailLink = "mailto:" + email + "?subject=" + subj + "&body=" + body;
-            window._mailLinks = window._mailLinks || {};
-            window._mailLinks[o.id] = mailLink;
-            return "<span style='color:#3b82f6;font-size:18px;cursor:pointer' title='" + email + "' onclick='openMail(" + o.id + ")'>✉️</span>";
+            var subj = encodeURIComponent("Ордер " + o.order_id);
+            var body = encodeURIComponent("По ордеру " + o.order_id + ":\nСтатус: " + (o.cargo_status||"—") + "\nДоставка: " + (o.delivery_status||"—"));
+            return "<a href='mailto:" + email + "?subject=" + subj + "&body=" + body + "' style='color:#3b82f6;font-size:16px;text-decoration:none' title='" + email + "'>✉️</a>";
           } else {
-            return "<span style='color:#f59e0b;cursor:pointer;font-size:18px' title='Додати email у вкладці Клієнти' onclick='switchTab(\"clients\")'>✉️</span>";
+            return "<span style='color:#d1d5db;font-size:16px' title='Email не вказано'>✉️</span>";
           }
         })()
       + "</td>"
@@ -498,7 +470,6 @@ function saveRequest(id) {
     var wasAccepted = r.status === "Accepted";
     var alreadyHasOrder = db.orders.some(function(o){ return o.order_id === r.order_id; });
     Object.assign(r, data);
-    // Auto-create order when status changes to Accepted and order doesn't exist yet
     if (data.status === "Accepted" && !wasAccepted && !alreadyHasOrder) {
       save(); closeModal();
       createOrder(r.id);
@@ -507,14 +478,9 @@ function saveRequest(id) {
   } else {
     data.id = nextId(db.requests);
     db.requests.unshift(data);
-    // Auto-create order if added directly as Accepted
     if (data.status === "Accepted") {
-      var alreadyExists = db.orders.some(function(o){ return o.order_id === data.order_id; });
-      if (!alreadyExists) {
-        save(); closeModal();
-        createOrder(data.id);
-        return;
-      }
+      var exists = db.orders.some(function(o){ return o.order_id === data.order_id; });
+      if (!exists) { save(); closeModal(); createOrder(data.id); return; }
     }
   }
   save(); closeModal(); render();
@@ -554,14 +520,6 @@ function createOrder(reqId) {
 }
 
 // ── Add/Edit Order ───────────────────────────────────────────────
-function fillClientFromSel() {
-  var sel = document.getElementById("of-client-sel");
-  var inp = document.getElementById("of-client");
-  if (sel && inp && sel.value) {
-    inp.value = sel.value;
-  }
-}
-
 function openAddOrder() { showOrderModal(null); }
 function openEditOrder(id) {
   var o = db.orders.find(function(x){return x.id===id;});
@@ -581,14 +539,9 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Ордер</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : "ЗЕД-") + "'></div>"
+    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : "ZED-2026-") + "'></div>"
     + "<div class='field'><label>ДАТА ОРДЕРУ</label><input id='of-date' value='" + escQ(isEdit ? (o.date||"") : new Date().toLocaleDateString("uk-UA")) + "'></div>"
-    + "<div class='field'><label>КЛІЄНТ</label>"
-    + "<select id='of-client-sel' onchange='fillClientFromSel()' style='width:100%;border:1px solid #e5e7eb;border-radius:7px;padding:8px 11px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px'>"
-    + "<option value=''>— обрати зі списку клієнтів —</option>"
-    + (db.clients||[]).map(function(c){return "<option value='" + escQ(c.name) + "'" + ((isEdit && o.client===c.name)?" selected":"") + ">" + c.name + "</option>";}).join("")
-    + "</select>"
-    + "<input id='of-client' placeholder='або введіть вручну' value='" + escQ(isEdit ? o.client : "") + "'></div>"
+    + "<div class='field'><label>КЛІЄНТ</label><input id='of-client' value='" + escQ(isEdit ? o.client : "") + "'></div>"
     + "<div class='field'><label>МАРШРУТ</label><input id='of-route' value='" + escQ(isEdit ? o.route : "") + "'></div>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
     + "<div class='field'><label>ІНКОТЕРМС</label>" + sel("of-inc", INCOTERMS, isEdit ? o.incoterms : "CIF") + "</div>"
@@ -695,508 +648,9 @@ function genReqNum() {
   return dd+"-"+mm+"-"+String(existing+1).padStart(2,"0");
 }
 
-// ── Excel Import ─────────────────────────────────────────────────
-function importExcel() {
-  document.getElementById("excel-inp").click();
-}
-
-function handleExcel(file) {
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      var wb = XLSX.read(e.target.result, {type:"array"});
-      var imported = {requests: [], orders: []};
-      var errors = [];
-
-      // Import Requests
-      if (wb.SheetNames.indexOf("Запити") >= 0) {
-        var ws = wb.Sheets["Запити"];
-        var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
-        // Skip title rows (1,2) and header row (3) — data starts at row 4 (index 3)
-        var dataRows = rows.slice(3);
-        var idCounter = db.requests.reduce(function(m,r){return Math.max(m,r.id||0);},0)+1;
-
-        dataRows.forEach(function(row) {
-          var reqNum = String(row[0]||"").trim();
-          if (!reqNum) return; // skip empty rows
-
-          // Parse multiline cells
-          var clientParts = String(row[1]||"").split(String.fromCharCode(10));
-          var routeParts = String(row[2]||"").split(String.fromCharCode(10));
-          var sumParts = String(row[5]||"").split(String.fromCharCode(10));
-
-          var r = {
-            id: idCounter++,
-            req_num: reqNum,
-            date: "", // not in Excel
-            client: clientParts[0]||"",
-            contact: clientParts[1]||"",
-            route: routeParts[0]||"",
-            type: routeParts[1]||"",
-            cargo: String(row[3]||""),
-            weight: String(row[4]||""),
-            sum_log: parseFloat(String(sumParts[0]||"").replace(/\s/g,""))||0,
-            sum_brok: parseFloat(String(sumParts[1]||"").replace(/\s/g,""))||0,
-            status: String(row[7]||"Новий запит"),
-            order_id: String(row[8]||""),
-            docs: String(row[9]||""),
-            comment: String(row[10]||"")
-          };
-
-          // Check if already exists by req_num
-          var exists = db.requests.find(function(x){return x.req_num===r.req_num;});
-          if (!exists) {
-            imported.requests.push(r);
-          }
-        });
-      }
-
-      // Import Orders
-      if (wb.SheetNames.indexOf("Ордери") >= 0) {
-        var ws2 = wb.Sheets["Ордери"];
-        var rows2 = XLSX.utils.sheet_to_json(ws2, {header:1, defval:""});
-        var dataRows2 = rows2.slice(3);
-        var idCounter2 = db.orders.reduce(function(m,o){return Math.max(m,o.id||0);},0)+1;
-
-        dataRows2.forEach(function(row) {
-          var oidParts = String(row[0]||"").split(String.fromCharCode(10));
-          var oid = oidParts[0]||"";
-          if (!oid || (oid.indexOf("ZED-") < 0 && oid.indexOf("ЗЕД-") < 0)) return;
-
-          var clientRouteParts = oidParts[1] ? oidParts[1].split(" / ") : ["",""];
-          var reqDateParts = oidParts[2] ? oidParts[2].split(" / ") : ["",""];
-          var bookParts = String(row[2]||"").split(String.fromCharCode(10));
-          var routeParts = String(row[4]||"").split(String.fromCharCode(10));
-          var bolParts = String(row[5]||"").split(String.fromCharCode(10));
-          var resortParts = String(row[7]||"").split(String.fromCharCode(10));
-          var logParts = String(row[8]||"").split(String.fromCharCode(10));
-          var payParts = String(row[11]||"").split(String.fromCharCode(10));
-
-          var o = {
-            id: idCounter2++,
-            order_id: oid,
-            client: clientRouteParts[0]||"",
-            route: clientRouteParts[1]||"",
-            req_id: reqDateParts[0]||"",
-            date: reqDateParts[1]||"",
-            incoterms: String(row[1]||""),
-            booking: bookParts[0]||"",
-            carrier: (bookParts[1]||"").split(" / ")[0]||"",
-            container: (bookParts[1]||"").split(" / ")[1]||"",
-            cutoff: String(row[3]||""),
-            route_full: routeParts[0]||"",
-            etd: (routeParts[1]||"").split(" / ")[0]||"",
-            eta: (routeParts[1]||"").split(" / ")[1]||"",
-            bol: bolParts[0]||"",
-            cargo_status: bolParts[1]||"",
-            decl: (bolParts[2]||"").replace(/.*\//,"").trim(),
-            customs_status: String(row[6]||""),
-            customs_date: "",
-            resort: resortParts[0]||"",
-            resort_addr: resortParts[1]||"",
-            resort_comment: "",
-            logist_ua: (logParts[0]||"").split(" / ")[0]||"",
-            transport_ua: (logParts[0]||"").split(" / ")[1]||"",
-            delivery_status: String(row[9]||""),
-            delivery_date: "",
-            invoice_sum: parseFloat(String(row[10]||"").replace(/\s/g,""))||0,
-            payment_status: payParts[0]||"",
-            payment_date: payParts[1]||"",
-            docs: String(row[12]||""),
-            notes: ""
-          };
-
-          var exists = db.orders.find(function(x){return x.order_id===oid;});
-          if (!exists) {
-            imported.orders.push(o);
-          }
-        });
-      }
-
-      // Add imported data
-      db.requests = imported.requests.concat(db.requests);
-      db.orders = imported.orders.concat(db.orders);
-      save();
-      render();
-
-      var msg = "Імпортовано:\n" +
-        imported.requests.length + " нових запитів\n" +
-        imported.orders.length + " нових ордерів";
-      if (imported.requests.length === 0 && imported.orders.length === 0) {
-        msg = "Нових даних не знайдено (всі записи вже існують)";
-      }
-      alert(msg);
-
-    } catch(err) {
-      alert("Помилка імпорту: " + err.message);
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-// ── CLIENTS ──────────────────────────────────────────────────────
-var cliSearch = "";
-
-function getSampleClients() { return []; }
-
-function renderClients() {
-  if (!db.clients) db.clients = [];
-  var filtered = db.clients.filter(function(c) {
-    var q = cliSearch.toLowerCase();
-    return !q || c.name.toLowerCase().indexOf(q) >= 0
-      || (c.contact||"").toLowerCase().indexOf(q) >= 0
-      || (c.emails||[]).join(" ").toLowerCase().indexOf(q) >= 0;
-  });
-
-  var html = "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук клієнта...' value='" + cliSearch + "' oninput='cliSearch=this.value;renderClients()'>"
-    + "<button class='btn btn-yellow' onclick='openAddClient()'>+ Додати клієнта</button>"
-    + "</div>";
-
-  if (!filtered.length) {
-    html += "<div class='empty-state'><div class='empty-icon'>👥</div><div class='empty-text'>" + (cliSearch ? "Клієнтів не знайдено" : "Додайте першого клієнта") + "</div></div>";
-    document.getElementById("main-content").innerHTML = html;
-    return;
-  }
-
-  html += "<div class='client-grid'>";
-  filtered.forEach(function(c) {
-    var emails = (c.emails||[]).map(function(e) {
-      return "<div class='cc-email'>✉️ <a href='mailto:" + e + "'>" + e + "</a></div>";
-    }).join("");
-
-    var tags = (c.tags||[]).map(function(t){return "<span class='cc-tag'>" + t + "</span>";}).join(" ");
-
-    html += "<div class='client-card'>"
-      + "<div class='cc-name'>" + c.name + "</div>"
-      + "<div class='cc-company'>" + (c.contact||"") + (c.phone ? " &bull; " + c.phone : "") + "</div>"
-      + "<div class='cc-emails'>" + (emails||"<div style='color:#d1d5db;font-size:12px'>Email не вказано</div>") + "</div>"
-      + (tags ? "<div style='margin-bottom:8px'>" + tags + "</div>" : "")
-      + (c.notes ? "<div style='font-size:11px;color:#9ca3af;margin-bottom:8px'>" + c.notes + "</div>" : "")
-      + "<div class='cc-actions'>"
-      + "<button class='act-btn' onclick='openEditClient(" + c.id + ")'>✏️ Редагувати</button>"
-      + "<button class='act-btn' onclick='sendEmail(" + c.id + ")'>✉️ Email</button>"
-      + "<button class='act-btn del' onclick='deleteClient(" + c.id + ")'>✕</button>"
-      + "</div></div>";
-  });
-  html += "</div>";
-  document.getElementById("main-content").innerHTML = html;
-}
-
-function openMail(orderId) {
-  var links = window._mailLinks || {};
-  var link = links[orderId];
-  if (link) {
-    window.open(link, "_blank");
-  } else {
-    alert("Email клієнта не знайдено. Перевірте вкладку Клієнти.");
-  }
-}
-
-function sendEmail(id) {
-  var c = db.clients.find(function(x){return x.id===id;});
-  if (!c || !(c.emails||[]).length) { alert("Email не вказано"); return; }
-  window.open("mailto:" + c.emails.join(",") + "?subject=ZED Hub — " + c.name, "_blank");
-}
-
-function openAddClient() { showClientModal(null); }
-function openEditClient(id) {
-  var c = db.clients.find(function(x){return x.id===id;});
-  if (c) showClientModal(c);
-}
-
-function showClientModal(c) {
-  var isEdit = !!c;
-  var emailsStr = isEdit ? (c.emails||[]).join(", ") : "";
-  var tagsStr = isEdit ? (c.tags||[]).join(", ") : "";
-
-  var html = "<div class='modal-bg' id='cli-modal'><div class='modal'>"
-    + "<div class='modal-title'>" + (isEdit ? "✏️ Редагувати клієнта" : "➕ Новий клієнт") + "</div>"
-    + "<div class='form-grid'>"
-    + "<div class='field'><label>НАЗВА КОМПАНІЇ *</label><input id='cf-name' value='" + escQ(isEdit ? c.name : "") + "' placeholder='ТОВ «Назва»'></div>"
-    + "<div class='field'><label>КОНТАКТНА ОСОБА</label><input id='cf-contact' value='" + escQ(isEdit ? (c.contact||"") : "") + "'></div>"
-    + "<div class='field'><label>ТЕЛЕФОН</label><input id='cf-phone' value='" + escQ(isEdit ? (c.phone||"") : "") + "' placeholder='+380...'></div>"
-    + "<div class='field'><label>ТЕГИ</label><input id='cf-tags' value='" + escQ(tagsStr) + "' placeholder='VIP, Регулярний...'></div>"
-    + "</div>"
-    + "<div class='form-grid full'>"
-    + "<div class='field'><label>📧 EMAIL АДРЕСИ (через кому)</label><input id='cf-emails' value='" + escQ(emailsStr) + "' placeholder='email1@ua, email2@ua'></div>"
-    + "<div class='field'><label>НОТАТКИ</label><textarea id='cf-notes'>" + (isEdit ? (c.notes||"") : "") + "</textarea></div>"
-    + "</div>"
-    + "<div class='modal-btns'>"
-    + "<button class='btn btn-gray' onclick='closeModal()'>Скасувати</button>"
-    + "<button class='btn btn-yellow' onclick='saveClient(" + (isEdit ? c.id : "null") + ")'>Зберегти</button>"
-    + "</div></div></div>";
-
-  document.getElementById("modal-area").innerHTML = html;
-}
-
-function saveClient(id) {
-  var name = gv("cf-name").trim();
-  if (!name) { alert("Введіть назву компанії"); return; }
-  var emailsRaw = gv("cf-emails").trim();
-  var emails = emailsRaw ? emailsRaw.split(",").map(function(e){return e.trim();}).filter(Boolean) : [];
-  var tagsRaw = gv("cf-tags").trim();
-  var tags = tagsRaw ? tagsRaw.split(",").map(function(t){return t.trim();}).filter(Boolean) : [];
-
-  var data = {
-    name: name, contact: gv("cf-contact"), phone: gv("cf-phone"),
-    emails: emails, tags: tags, notes: gv("cf-notes")
-  };
-  if (!db.clients) db.clients = [];
-  if (id) {
-    var cli = db.clients.find(function(x){return x.id===id;});
-    Object.assign(cli, data);
-  } else {
-    data.id = nextId(db.clients);
-    db.clients.unshift(data);
-  }
-  save(); closeModal(); render();
-}
-
-function deleteClient(id) {
-  if (!confirm("Видалити клієнта?")) return;
-  db.clients = db.clients.filter(function(x){return x.id!==id;});
-  save(); render();
-}
-
-// ── Clear data ───────────────────────────────────────────────────
-function clearAllData() {
-  if (!confirm("Видалити ВСІ дані? (запити, ордери, клієнти)")) return;
-  db = {requests: [], orders: [], clients: []};
-  cloudSave();
-  save();
-  render();
-  alert("Всі дані видалено");
-}
-
-// ── Реєстр CSV Import ────────────────────────────────────────────
-function importRejestr() {
-  document.getElementById("rejestr-inp").click();
-}
-
-function handleRejestr(file) {
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      var raw = e.target.result;
-      // Decode as latin-1 compatible
-      var text = raw;
-      var lines = text.split("\n");
-      var dataLines = lines.filter(function(l){ var c = l.split(";"); return c.length > 2 && c[1] && c[1].trim().indexOf("DV") === 0; });
-      // DV rows already filtered above
-
-      // Ensure client exists
-      if (!db.clients) db.clients = [];
-      var clientName = 'ТОВ «Гарні речі»';
-      var clientExists = db.clients.find(function(c){ return c.name === clientName; });
-      if (!clientExists) {
-        db.clients.unshift({
-          id: nextId(db.clients),
-          name: clientName,
-          contact: "",
-          phone: "",
-          emails: [],
-          tags: ["Основний"],
-          notes: "Єдиний клієнт ZED напрямку"
-        });
-      }
-
-      var imported = 0;
-      var skipped = 0;
-      var ordId = db.orders.reduce(function(m,o){return Math.max(m,o.id||0);},0)+1;
-
-      dataLines.forEach(function(line) {
-        var cols = line.split(";");
-        if (cols.length < 5) return;
-
-        var dv = cols[1] ? cols[1].trim().replace(/"/g,"") : "";
-        if (!dv || dv.indexOf("DV") < 0) return;
-
-        // Skip duplicates
-        var exists = db.orders.find(function(o){ return o.req_id === dv; });
-        if (exists) { skipped++; return; }
-
-        var supplier = cols[3] ? cols[3].trim().split(String.fromCharCode(10)).join("").split(String.fromCharCode(13)).join("").split(String.fromCharCode(34)).join("") : "";
-var incRaw = cols[5] ? cols[5].trim() : "";
-        var incoterms = incRaw.split(" ")[0] || "";
-        var incRoute = incRaw.split(" ").slice(1).join(" ");
-
-        var etd = cols[8] ? cols[8].trim() : "";
-        var etaGdansk = cols[10] ? cols[10].trim() : "";
-        var etaDest = cols[12] ? cols[12].trim() : "";
-
-        var sumRaw = cols[15] ? cols[15].trim().replace(/ /g,"").replace(",",".") : "";
-        var invoiceSum = parseFloat(sumRaw) || 0;
-
-        var cartons = cols[16] ? cols[16].trim() : "";
-        var weight = cols[17] ? cols[17].trim() : "";
-        var cbm = cols[18] ? cols[18].trim().replace("?3","CBM").replace("m3","CBM") : "";
-        var contType = cols[20] ? cols[20].trim() : "";
-        var fclLcl = cols[21] ? cols[21].trim() : "";
-        var contNo = cols[26] ? cols[26].trim() : "";
-        var comment = cols[27] ? cols[27].trim() : "";
-
-        var o = {
-          id: ordId++,
-          order_id: "ЗЕД-" + dv,
-          client: clientName,
-          route: "Китай → Україна",
-          req_id: dv,
-          date: "",
-          incoterms: incoterms,
-          booking: "",
-          carrier: supplier,
-          container: contNo + (contType ? " (" + contType + " " + fclLcl + ")" : ""),
-          cutoff: "",
-          route_full: incRoute ? incRoute + " → Gdansk → Україна" : "Китай → Gdansk → Україна",
-          etd: etd,
-          eta: etaGdansk + (etaDest ? " / " + etaDest : ""),
-          bol: "",
-          cargo_status: "В дорозі",
-          decl: "",
-          customs_status: "Очікує документи",
-          customs_date: "",
-          resort: "Не потрібно",
-          resort_addr: "",
-          resort_comment: "",
-          logist_ua: "",
-          transport_ua: "",
-          delivery_status: "Очікує",
-          delivery_date: etaDest,
-          invoice_sum: invoiceSum,
-          payment_status: "Очікує від фін відділу",
-          payment_date: "",
-          docs: "",
-          notes: "Вантаж: " + cartons + " кор / " + weight + " кг / " + cbm + (comment ? " | " + comment : "")
-        };
-
-        db.orders.push(o);
-        imported++;
-      });
-
-      save();
-      render();
-        alert("Імпортовано: " + imported + " ордерів. Пропущено: " + skipped + ". " + debugInfo);
-
-    } catch(err) {
-      alert("Помилка імпорту: " + err.message);
-    }
-  };
-  reader.readAsText(file, "latin1");
-}
-
-// ── Excel Реєстр Import ──────────────────────────────────────────
-function importRejestrXlsx() {
-  document.getElementById("rejestr-xlsx-inp").click();
-}
-
-function handleRejestrXlsx(file) {
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      var wb = XLSX.read(e.target.result, {type:"array", cellDates:true});
-      var ws = wb.Sheets[wb.SheetNames[0]];
-      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false, dateNF:"dd.mm.yyyy"});
-
-      // Client
-      if (!db.clients) db.clients = [];
-      var clientName = "ТОВ «Гарні речі»";
-      if (!db.clients.find(function(c){return c.name===clientName;})) {
-        db.clients.unshift({id:nextId(db.clients), name:clientName, contact:"", phone:"", emails:[], tags:["Основний"], notes:"Єдиний клієнт ZED напрямку"});
-      }
-
-      var imported = 0;
-      var skipped = 0;
-      var ordId = db.orders.reduce(function(m,o){return Math.max(m,o.id||0);},0)+1;
-
-      // Start from row index 276 (row 277 in Excel = index 276, 0-based)
-      // Filter: column E (index 4) date >= 01.04.2026
-      var startRow = 276;
-
-      for (var i = startRow; i < rows.length; i++) {
-        var row = rows[i];
-        if (!row || !row[1]) continue;
-        var orderNum = String(row[1]).trim();
-        if (!orderNum || orderNum === "номер замовлення") continue;
-
-        // Check duplicate
-        if (db.orders.find(function(o){return o.req_id===orderNum;})) {
-          skipped++; continue;
-        }
-
-        function getVal(idx) {
-          if (!row[idx] && row[idx] !== 0) return "";
-          var v = String(row[idx]).trim();
-          // Clean up datetime strings
-          if (v.match(/^\d{4}-\d{2}-\d{2}/)) {
-            var parts = v.split("-");
-            return parts[2].substring(0,2) + "." + parts[1] + "." + parts[0];
-          }
-          return v;
-        }
-
-        var incoRaw = getVal(5);
-        var incoterms = incoRaw ? incoRaw.split(" ")[0] : "";
-        var incoRoute = incoRaw ? incoRaw.split(" ").slice(1).join(" ") : "";
-
-        var invoiceRaw = getVal(15);
-        var invoiceSum = parseFloat(invoiceRaw.replace(/[^0-9.]/g,"")) || 0;
-
-        var o = {
-          id: ordId++,
-          order_id: "ЗЕД-" + orderNum,
-          client: clientName,
-          route: incoRoute ? incoRoute + " → Gdansk → Україна" : "Китай → Україна",
-          req_id: orderNum,
-          date: getVal(4),
-          incoterms: incoterms,
-          booking: "",
-          carrier: getVal(3),
-          container: getVal(26) || "",
-          cutoff: getVal(6),
-          route_full: incoRoute ? incoRoute + " → Gdansk" : "",
-          etd: getVal(8),
-          eta: getVal(10) + (getVal(12) ? " / " + getVal(12) : ""),
-          bol: "",
-          cargo_status: "Очікує завантаження",
-          decl: "",
-          customs_status: "Очікує документи",
-          customs_date: "",
-          resort: "Не потрібно",
-          resort_addr: "",
-          resort_comment: "",
-          logist_ua: getVal(2),
-          transport_ua: "",
-          delivery_status: "Очікує",
-          delivery_date: getVal(13),
-          invoice_sum: invoiceSum,
-          payment_status: "Очікує від фін відділу",
-          payment_date: "",
-          docs: "",
-          notes: getVal(16) + " кор / " + getVal(17) + " кг / " + getVal(18) + " CBM"
-        };
-
-        db.orders.push(o);
-        imported++;
-      }
-
-      save();
-      render();
-      alert("Імпортовано: " + imported + " ордерів. Пропущено: " + skipped + ". Клієнт: " + clientName);
-
-    } catch(err) {
-      alert("Помилка імпорту Excel: " + err.message);
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
 // ── Init ─────────────────────────────────────────────────────────
 updateCounts();
-initDb();
+render();
 </script>
 </body>
 </html>
