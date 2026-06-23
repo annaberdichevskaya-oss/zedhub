@@ -194,30 +194,58 @@ function getSampleOrders() { return []; }
 var db = {requests: [], orders: [], clients: []};
 var _saveTimer = null;
 
-// Cloud Storage via Supabase (shared for all users)
-var SUPA_URL = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1/zedhub";
+// Cloud Storage via Supabase — окремі таблиці для кожного типу даних
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
 var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var LS_KEY = "zedhub_v2_cache";
 
-var LS_KEY = "zedhub_cache";
+function supaHeaders() {
+  return {
+    "apikey": SUPA_KEY,
+    "Authorization": "Bearer " + SUPA_KEY,
+    "Content-Type": "application/json",
+    "Prefer": "resolution=merge-duplicates"
+  };
+}
+
+async function supaFetch(table, signal) {
+  var res = await fetch(SUPA_BASE + "/" + table + "?select=id,data&limit=5000", {
+    headers: supaHeaders(),
+    signal: signal
+  });
+  var rows = await res.json();
+  return Array.isArray(rows) ? rows.map(function(r){ var d = r.data||{}; d.id = r.id; return d; }) : [];
+}
+
+async function supaUpsert(table, record) {
+  var payload = { id: record.id, data: record, updated_at: new Date().toISOString() };
+  await fetch(SUPA_BASE + "/" + table, {
+    method: "POST",
+    headers: supaHeaders(),
+    body: JSON.stringify(payload)
+  });
+}
+
+async function supaDelete(table, id) {
+  await fetch(SUPA_BASE + "/" + table + "?id=eq." + id, {
+    method: "DELETE",
+    headers: supaHeaders()
+  });
+}
 
 async function cloudLoad() {
   try {
     var controller = new AbortController();
     var timeout = setTimeout(function(){ controller.abort(); }, 5000);
-    var res = await fetch(SUPA_URL + "?key=eq.zedhub_db&select=value", {
-      headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY },
-      signal: controller.signal
-    });
+    var results = await Promise.all([
+      supaFetch("requests", controller.signal),
+      supaFetch("orders", controller.signal),
+      supaFetch("clients", controller.signal)
+    ]);
     clearTimeout(timeout);
-    var rows = await res.json();
-    if (rows && rows.length && rows[0].value) {
-      var d = JSON.parse(rows[0].value);
-      if (d && d.requests) {
-        if (!d.clients) d.clients = [];
-        try { localStorage.setItem(LS_KEY, rows[0].value); } catch(e) {}
-        return d;
-      }
-    }
+    var d = { requests: results[0], orders: results[1], clients: results[2] };
+    try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch(e) {}
+    return d;
   } catch(e) { console.error("Load error:", e); }
   // Fallback to local cache
   try {
@@ -230,33 +258,54 @@ async function cloudLoad() {
   return {requests: [], orders: [], clients: []};
 }
 
-async function cloudSave() {
-  try {
-    var payload = JSON.stringify(db);
-    try { localStorage.setItem(LS_KEY, payload); } catch(e) {}
-    await fetch(SUPA_URL, {
-      method: "POST",
-      headers: {
-        "apikey": SUPA_KEY,
-        "Authorization": "Bearer " + SUPA_KEY,
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates"
-      },
-      body: JSON.stringify({key: "zedhub_db", value: payload, updated_at: new Date().toISOString()})
-    });
-  } catch(e) { console.error("Save error:", e); }
+// Queue for pending saves
+var _saveQueues = { requests: {}, orders: {}, clients: {} };
+var _deleteQueues = { requests: {}, orders: {}, clients: {} };
+var _saveTimer = null;
+
+async function flushSaves() {
+  var tables = ["requests", "orders", "clients"];
+  for (var t = 0; t < tables.length; t++) {
+    var table = tables[t];
+    var ids = Object.keys(_saveQueues[table]);
+    for (var i = 0; i < ids.length; i++) {
+      try { await supaUpsert(table, _saveQueues[table][ids[i]]); } catch(e) {}
+    }
+    _saveQueues[table] = {};
+    var delIds = Object.keys(_deleteQueues[table]);
+    for (var j = 0; j < delIds.length; j++) {
+      try { await supaDelete(table, delIds[j]); } catch(e) {}
+    }
+    _deleteQueues[table] = {};
+  }
+}
+
+function queueSave(table, record) {
+  _saveQueues[table][record.id] = record;
+}
+
+function queueDelete(table, id) {
+  delete _saveQueues[table][id];
+  _deleteQueues[table][id] = true;
 }
 
 function save() {
   updateCounts();
   // Save to local cache immediately
   try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
+  // Queue all current data for cloud save
+  db.requests.forEach(function(r){ queueSave("requests", r); });
+  db.orders.forEach(function(o){ queueSave("orders", o); });
+  db.clients.forEach(function(c){ queueSave("clients", c); });
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(function(){ cloudSave(); }, 800);
+  _saveTimer = setTimeout(function(){ flushSaves(); }, 800);
 }
 
 async function initDb() {
-  // Show cached data immediately
+  // Always show UI immediately — never block on cloud
+  showLoading(false);
+  
+  // Load from local cache first
   try {
     var cached = localStorage.getItem(LS_KEY);
     if (cached) {
@@ -264,39 +313,24 @@ async function initDb() {
       if (d && d.requests) {
         if (!d.clients) d.clients = [];
         db = d;
-        showLoading(false);
-        render();
-        updateCounts();
       }
     }
   } catch(e) {}
+  
+  render();
+  updateCounts();
 
-  // If we have cached data — show it, load cloud in background silently
-  // If no cache — show loader but max 4 seconds then give up
-  var hasCache = db.requests.length > 0;
-  if (!hasCache) showLoading(true);
-
-  var cloudDone = false;
-  var fallbackTimer = setTimeout(function() {
-    if (!cloudDone) {
-      showLoading(false);
+  // Load from cloud silently in background — max 5 seconds
+  try {
+    var controller = new AbortController();
+    setTimeout(function(){ controller.abort(); }, 5000);
+    var fresh = await cloudLoad();
+    if (fresh && fresh.requests && fresh.requests.length > 0) {
+      db = fresh;
       render();
       updateCounts();
     }
-  }, 4000);
-
-  try {
-    var fresh = await cloudLoad();
-    cloudDone = true;
-    clearTimeout(fallbackTimer);
-    db = fresh;
-  } catch(e) {
-    cloudDone = true;
-    clearTimeout(fallbackTimer);
-  }
-  showLoading(false);
-  render();
-  updateCounts();
+  } catch(e) {}
 }
 
 function showLoading(on) {
