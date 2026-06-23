@@ -517,10 +517,10 @@ function saveRequest(id) {
   if (id) {
     var r = db.requests.find(function(x){return x.id===id;});
     var wasAccepted = r.status === "Accepted";
-    var hadOrder = !!r.order_id;
+    var alreadyHasOrder = db.orders.some(function(o){ return o.order_id === r.order_id; });
     Object.assign(r, data);
-    // Auto-create order when status changes to Accepted
-    if (data.status === "Accepted" && !wasAccepted && !hadOrder) {
+    // Auto-create order when status changes to Accepted and order doesn't exist yet
+    if (data.status === "Accepted" && !wasAccepted && !alreadyHasOrder) {
       save(); closeModal();
       createOrder(r.id);
       return;
@@ -529,10 +529,13 @@ function saveRequest(id) {
     data.id = nextId(db.requests);
     db.requests.unshift(data);
     // Auto-create order if added directly as Accepted
-    if (data.status === "Accepted" && !data.order_id) {
-      save(); closeModal();
-      createOrder(data.id);
-      return;
+    if (data.status === "Accepted") {
+      var alreadyExists = db.orders.some(function(o){ return o.order_id === data.order_id; });
+      if (!alreadyExists) {
+        save(); closeModal();
+        createOrder(data.id);
+        return;
+      }
     }
   }
   save(); closeModal(); render();
