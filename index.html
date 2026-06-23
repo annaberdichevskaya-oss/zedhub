@@ -286,7 +286,9 @@ function restoreBackup(file) {
 var currentTab = "requests";
 var reqSearch = "";
 var reqFilter = "";
+var reqSort = "new";
 var ordSearch = "";
+var ordSort = "new";
 
 function switchTab(tab) {
   currentTab = tab;
@@ -310,6 +312,10 @@ function renderRequests() {
     var matchF = !reqFilter || r.status === reqFilter;
     return matchQ && matchF;
   });
+  filtered.sort(function(a,b){
+    var da = (a.req_num||""), db_ = (b.req_num||"");
+    return reqSort === "new" ? db_.localeCompare(da) : da.localeCompare(db_);
+  });
 
   var accepted = db.requests.filter(function(r){return r.status==="Accepted";}).length;
   var inProgress = db.requests.filter(function(r){return r.status==="Прораховується"||r.status==="На погодженні";}).length;
@@ -328,6 +334,7 @@ function renderRequests() {
     + "<option value=''>Всі статуси</option>"
     + REQ_STATUSES.map(function(s){return "<option value='" + s + "'" + (reqFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select>"
+    + "<button class='btn btn-gray' onclick='reqSort=reqSort==="new"?"old":"new";renderRequests()' title='Сортування за датою'>" + (reqSort==="new" ? "↓ Новіші" : "↑ Старіші") + "</button>"
     + "<button class='btn btn-yellow' onclick='openAddRequest()'>+ Новий запит</button>"
     + "</div>";
 
@@ -375,6 +382,10 @@ function renderOrders() {
     var q = ordSearch.toLowerCase();
     return !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route||"").toLowerCase().indexOf(q) >= 0;
   });
+  filtered.sort(function(a,b){
+    var da = (a.order_id||""), db_ = (b.order_id||"");
+    return ordSort === "new" ? db_.localeCompare(da) : da.localeCompare(db_);
+  });
 
   var inTransit = db.orders.filter(function(o){return o.cargo_status==="В морі"||o.cargo_status==="В дорозі";}).length;
   var atCustoms = db.orders.filter(function(o){return o.customs_status==="На митниці"||o.customs_status==="Митний огляд";}).length;
@@ -390,6 +401,7 @@ function renderOrders() {
 
   html += "<div class='toolbar'>"
     + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + ordSearch + "' oninput='ordSearch=this.value;renderOrders()'>"
+    + "<button class='btn btn-gray' onclick='ordSort=ordSort==="new"?"old":"new";renderOrders()' title='Сортування за датою'>" + (ordSort==="new" ? "↓ Новіші" : "↑ Старіші") + "</button>"
     + "<button class='btn btn-yellow' onclick='openAddOrder()'>+ Новий ордер</button>"
     + "</div>";
 
