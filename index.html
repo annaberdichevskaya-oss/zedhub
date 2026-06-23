@@ -301,10 +301,9 @@ function save() {
   _saveTimer = setTimeout(function(){ flushSaves(); }, 800);
 }
 
-async function initDb() {
-  // Always show UI immediately from local cache
+function initDb() {
+  // Load ONLY from localStorage — instant, no network
   showLoading(false);
-  
   try {
     var cached = localStorage.getItem(LS_KEY);
     if (cached) {
@@ -315,21 +314,8 @@ async function initDb() {
       }
     }
   } catch(e) {}
-  
   render();
   updateCounts();
-
-  // Load from cloud only after 2 seconds delay (non-blocking)
-  setTimeout(async function() {
-    try {
-      var fresh = await cloudLoad();
-      if (fresh && fresh.requests && fresh.requests.length >= db.requests.length) {
-        db = fresh;
-        render();
-        updateCounts();
-      }
-    } catch(e) {}
-  }, 2000);
 }
 
 function showLoading(on) {
