@@ -198,28 +198,42 @@ var _saveTimer = null;
 var SUPA_URL = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1/zedhub";
 var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
 
+var LS_KEY = "zedhub_cache";
+
 async function cloudLoad() {
   try {
+    var controller = new AbortController();
+    var timeout = setTimeout(function(){ controller.abort(); }, 5000);
     var res = await fetch(SUPA_URL + "?key=eq.zedhub_db&select=value", {
-      headers: {
-        "apikey": SUPA_KEY,
-        "Authorization": "Bearer " + SUPA_KEY
-      }
+      headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY },
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     var rows = await res.json();
     if (rows && rows.length && rows[0].value) {
       var d = JSON.parse(rows[0].value);
       if (d && d.requests) {
         if (!d.clients) d.clients = [];
+        try { localStorage.setItem(LS_KEY, rows[0].value); } catch(e) {}
         return d;
       }
     }
   } catch(e) { console.error("Load error:", e); }
+  // Fallback to local cache
+  try {
+    var cached = localStorage.getItem(LS_KEY);
+    if (cached) {
+      var d = JSON.parse(cached);
+      if (d && d.requests) { if (!d.clients) d.clients = []; return d; }
+    }
+  } catch(e) {}
   return {requests: [], orders: [], clients: []};
 }
 
 async function cloudSave() {
   try {
+    var payload = JSON.stringify(db);
+    try { localStorage.setItem(LS_KEY, payload); } catch(e) {}
     await fetch(SUPA_URL, {
       method: "POST",
       headers: {
@@ -228,20 +242,38 @@ async function cloudSave() {
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates"
       },
-      body: JSON.stringify({key: "zedhub_db", value: JSON.stringify(db), updated_at: new Date().toISOString()})
+      body: JSON.stringify({key: "zedhub_db", value: payload, updated_at: new Date().toISOString()})
     });
   } catch(e) { console.error("Save error:", e); }
 }
 
 function save() {
   updateCounts();
+  // Save to local cache immediately
+  try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(function(){ cloudSave(); }, 600);
+  _saveTimer = setTimeout(function(){ cloudSave(); }, 800);
 }
 
 async function initDb() {
-  showLoading(true);
-  db = await cloudLoad();
+  // Show cached data immediately while loading from cloud
+  try {
+    var cached = localStorage.getItem(LS_KEY);
+    if (cached) {
+      var d = JSON.parse(cached);
+      if (d && d.requests) {
+        if (!d.clients) d.clients = [];
+        db = d;
+        showLoading(false);
+        render();
+        updateCounts();
+      }
+    }
+  } catch(e) {}
+  // Then load fresh from cloud in background
+  if (!db.requests.length) showLoading(true);
+  var fresh = await cloudLoad();
+  db = fresh;
   showLoading(false);
   render();
   updateCounts();
