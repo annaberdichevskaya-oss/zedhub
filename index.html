@@ -126,10 +126,10 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
     <input type="file" id="rejestr-xlsx-inp" accept=".xlsx,.xls" style="display:none" onchange="handleRejestrXlsx(this.files[0])">
     <input type="file" id="rejestr-inp" accept=".csv" style="display:none" onchange="handleRejestr(this.files[0])">
     <input type="file" id="excel-inp" accept=".xlsx,.xls" style="display:none" onchange="handleExcel(this.files[0])">
-    <button class="hbtn" onclick="exportBackup()">💾 Бекап</button>
+    <button class="hbtn" onclick="exportBackup()">📤 Експорт даних</button>
     <button class="hbtn" style="color:#ef4444;border-color:#ef444440" onclick="clearAllData()">🗑 Очистити</button>
     <input type="file" id="restore-inp" accept=".json" style="display:none" onchange="restoreBackup(this.files[0])">
-    <button class="hbtn" onclick="document.getElementById('restore-inp').click()">📂 Відновити</button>
+    <button class="hbtn" onclick="document.getElementById('restore-inp').click()">📥 Імпорт даних</button>
     <button class="hbtn primary" onclick="openAddRequest()">+ Запит</button>
   </div>
 </header>
@@ -194,115 +194,16 @@ function getSampleOrders() { return []; }
 var db = {requests: [], orders: [], clients: []};
 var _saveTimer = null;
 
-// Cloud Storage via Supabase — окремі таблиці для кожного типу даних
-var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
-var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+// Local Storage only — instant, no network
 var LS_KEY = "zedhub_v2_cache";
-
-function supaHeaders() {
-  return {
-    "apikey": SUPA_KEY,
-    "Authorization": "Bearer " + SUPA_KEY,
-    "Content-Type": "application/json",
-    "Prefer": "resolution=merge-duplicates"
-  };
-}
-
-async function supaFetch(table, signal) {
-  var res = await fetch(SUPA_BASE + "/" + table + "?select=id,data&limit=5000", {
-    headers: supaHeaders(),
-    signal: signal
-  });
-  var rows = await res.json();
-  return Array.isArray(rows) ? rows.map(function(r){ var d = r.data||{}; d.id = r.id; return d; }) : [];
-}
-
-async function supaUpsert(table, record) {
-  var payload = { id: record.id, data: record, updated_at: new Date().toISOString() };
-  await fetch(SUPA_BASE + "/" + table, {
-    method: "POST",
-    headers: supaHeaders(),
-    body: JSON.stringify(payload)
-  });
-}
-
-async function supaDelete(table, id) {
-  await fetch(SUPA_BASE + "/" + table + "?id=eq." + id, {
-    method: "DELETE",
-    headers: supaHeaders()
-  });
-}
-
-async function cloudLoad() {
-  try {
-    var controller = new AbortController();
-    var timeout = setTimeout(function(){ controller.abort(); }, 5000);
-    var results = await Promise.all([
-      supaFetch("requests", controller.signal),
-      supaFetch("orders", controller.signal),
-      supaFetch("clients", controller.signal)
-    ]);
-    clearTimeout(timeout);
-    var d = { requests: results[0], orders: results[1], clients: results[2] };
-    try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch(e) {}
-    return d;
-  } catch(e) { console.error("Load error:", e); }
-  // Fallback to local cache
-  try {
-    var cached = localStorage.getItem(LS_KEY);
-    if (cached) {
-      var d = JSON.parse(cached);
-      if (d && d.requests) { if (!d.clients) d.clients = []; return d; }
-    }
-  } catch(e) {}
-  return {requests: [], orders: [], clients: []};
-}
-
-// Queue for pending saves
-var _saveQueues = { requests: {}, orders: {}, clients: {} };
-var _deleteQueues = { requests: {}, orders: {}, clients: {} };
 var _saveTimer = null;
-
-async function flushSaves() {
-  var tables = ["requests", "orders", "clients"];
-  for (var t = 0; t < tables.length; t++) {
-    var table = tables[t];
-    var ids = Object.keys(_saveQueues[table]);
-    for (var i = 0; i < ids.length; i++) {
-      try { await supaUpsert(table, _saveQueues[table][ids[i]]); } catch(e) {}
-    }
-    _saveQueues[table] = {};
-    var delIds = Object.keys(_deleteQueues[table]);
-    for (var j = 0; j < delIds.length; j++) {
-      try { await supaDelete(table, delIds[j]); } catch(e) {}
-    }
-    _deleteQueues[table] = {};
-  }
-}
-
-function queueSave(table, record) {
-  _saveQueues[table][record.id] = record;
-}
-
-function queueDelete(table, id) {
-  delete _saveQueues[table][id];
-  _deleteQueues[table][id] = true;
-}
 
 function save() {
   updateCounts();
-  // Save to local cache immediately
   try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
-  // Queue all current data for cloud save
-  db.requests.forEach(function(r){ queueSave("requests", r); });
-  db.orders.forEach(function(o){ queueSave("orders", o); });
-  db.clients.forEach(function(c){ queueSave("clients", c); });
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(function(){ flushSaves(); }, 800);
 }
 
 function initDb() {
-  // Load ONLY from localStorage — instant, no network
   showLoading(false);
   try {
     var cached = localStorage.getItem(LS_KEY);
