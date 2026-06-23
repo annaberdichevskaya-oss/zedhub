@@ -256,7 +256,7 @@ function save() {
 }
 
 async function initDb() {
-  // Show cached data immediately while loading from cloud
+  // Show cached data immediately
   try {
     var cached = localStorage.getItem(LS_KEY);
     if (cached) {
@@ -270,10 +270,30 @@ async function initDb() {
       }
     }
   } catch(e) {}
-  // Then load fresh from cloud in background
-  if (!db.requests.length) showLoading(true);
-  var fresh = await cloudLoad();
-  db = fresh;
+
+  // If we have cached data — show it, load cloud in background silently
+  // If no cache — show loader but max 4 seconds then give up
+  var hasCache = db.requests.length > 0;
+  if (!hasCache) showLoading(true);
+
+  var cloudDone = false;
+  var fallbackTimer = setTimeout(function() {
+    if (!cloudDone) {
+      showLoading(false);
+      render();
+      updateCounts();
+    }
+  }, 4000);
+
+  try {
+    var fresh = await cloudLoad();
+    cloudDone = true;
+    clearTimeout(fallbackTimer);
+    db = fresh;
+  } catch(e) {
+    cloudDone = true;
+    clearTimeout(fallbackTimer);
+  }
   showLoading(false);
   render();
   updateCounts();
