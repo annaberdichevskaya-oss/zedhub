@@ -516,9 +516,11 @@ function saveRequest(id) {
   if (id) {
     var r = db.requests.find(function(x){return x.id===id;});
     var wasAccepted = r.status === "Accepted";
+    var hadOrder = !!r.order_id;
     Object.assign(r, data);
     // Auto-create order when status changes to Accepted
-    if (data.status === "Accepted" && !wasAccepted && !r.order_id) {
+    if (data.status === "Accepted" && !wasAccepted && !hadOrder) {
+      save(); closeModal();
       createOrder(r.id);
       return;
     }
