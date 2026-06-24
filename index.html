@@ -668,6 +668,134 @@ function genReqNum() {
   return dd+"-"+mm+"-"+String(existing+1).padStart(2,"0");
 }
 
+
+var cliSearch = "";
+function renderClients() {
+  if (!db.clients) db.clients = [];
+  var filtered = db.clients.filter(function(c) {
+    var q = cliSearch.toLowerCase();
+    return !q || c.name.toLowerCase().indexOf(q) >= 0 || (c.contact||"").toLowerCase().indexOf(q) >= 0 || (c.emails||[]).join(" ").toLowerCase().indexOf(q) >= 0;
+  });
+  var html = "<div class='toolbar'><input class='search-box' placeholder='Пошук клієнта...' value='" + cliSearch + "' oninput='cliSearch=this.value;renderClients()'><button class='btn btn-yellow' onclick='openAddClient()'>+ Додати клієнта</button></div>";
+  if (!filtered.length) {
+    html += "<div style='text-align:center;padding:60px;color:#9ca3af'>Додайте першого клієнта</div>";
+    document.getElementById("main-content").innerHTML = html;
+    return;
+  }
+  html += "<div class='client-grid'>";
+  filtered.forEach(function(c) {
+    var emails = (c.emails||[]).map(function(e){ return "<div class='cc-email'>✉️ " + e + "</div>"; }).join("");
+    var tags = (c.tags||[]).map(function(t){return "<span class='cc-tag'>" + t + "</span>";}).join(" ");
+    html += "<div class='client-card'><div class='cc-name'>" + c.name + "</div><div class='cc-company'>" + (c.contact||"") + (c.phone ? " • " + c.phone : "") + "</div><div class='cc-emails'>" + (emails||"<div style='color:#d1d5db;font-size:12px'>Email не вказано</div>") + "</div>" + (tags ? "<div style='margin-bottom:8px'>" + tags + "</div>" : "") + (c.notes ? "<div style='font-size:11px;color:#9ca3af;margin-bottom:8px'>" + c.notes + "</div>" : "") + "<div class='cc-actions'><button class='act-btn' onclick='openEditClient(" + c.id + ")'>✏️ Редагувати</button><button class='act-btn del' onclick='deleteClient(" + c.id + ")'>✕</button></div></div>";
+  });
+  html += "</div>";
+  document.getElementById("main-content").innerHTML = html;
+}
+function openAddClient() { showClientModal(null); }
+function openEditClient(id) { var c = db.clients.find(function(x){return x.id===id;}); if (c) showClientModal(c); }
+function showClientModal(c) {
+  var isEdit = !!c;
+  var emailsStr = isEdit ? (c.emails||[]).join(", ") : "";
+  var tagsStr = isEdit ? (c.tags||[]).join(", ") : "";
+  var html = "<div class='modal-bg' id='cli-modal'><div class='modal'><div class='modal-title'>" + (isEdit ? "Редагувати клієнта" : "Новий клієнт") + "</div><div class='form-grid'><div class='field'><label>НАЗВА КОМПАНІЇ *</label><input id='cf-name' value='" + escQ(isEdit ? c.name : "") + "'></div><div class='field'><label>КОНТАКТНА ОСОБА</label><input id='cf-contact' value='" + escQ(isEdit ? (c.contact||"") : "") + "'></div><div class='field'><label>ТЕЛЕФОН</label><input id='cf-phone' value='" + escQ(isEdit ? (c.phone||"") : "") + "'></div><div class='field'><label>ТЕГИ</label><input id='cf-tags' value='" + escQ(tagsStr) + "'></div></div><div class='form-grid'><div class='field'><label>📧 EMAIL (через кому)</label><input id='cf-emails' value='" + escQ(emailsStr) + "' placeholder='email@ua'></div><div class='field'><label>НОТАТКИ</label><input id='cf-notes' value='" + escQ(isEdit ? (c.notes||"") : "") + "'></div></div><div class='modal-btns'><button class='btn btn-gray' onclick='closeModal()'>Скасувати</button><button class='btn btn-yellow' onclick='saveClient(" + (isEdit ? c.id : "null") + ")'>Зберегти</button></div></div></div>";
+  document.getElementById("modal-area").innerHTML = html;
+}
+function saveClient(id) {
+  var name = gv("cf-name").trim();
+  if (!name) { alert("Введіть назву"); return; }
+  var emailsRaw = gv("cf-emails").trim();
+  var emails = emailsRaw ? emailsRaw.split(",").map(function(e){return e.trim();}).filter(Boolean) : [];
+  var tagsRaw = gv("cf-tags").trim();
+  var tags = tagsRaw ? tagsRaw.split(",").map(function(t){return t.trim();}).filter(Boolean) : [];
+  var data = { name: name, contact: gv("cf-contact"), phone: gv("cf-phone"), emails: emails, tags: tags, notes: gv("cf-notes") };
+  if (!db.clients) db.clients = [];
+  if (id) { var cli = db.clients.find(function(x){return x.id===id;}); Object.assign(cli, data); }
+  else { data.id = nextId(db.clients); db.clients.unshift(data); }
+  save(); closeModal(); render();
+}
+function deleteClient(id) { if (!confirm("Видалити клієнта?")) return; db.clients = db.clients.filter(function(x){return x.id!==id;}); save(); render(); }
+function sendOrderMail(orderId) {
+  var o = db.orders.find(function(x){return x.id===orderId;});
+  if (!o) return;
+  var cli = (db.clients||[]).find(function(c){ return (c.name||"").trim().toLowerCase()===(o.client||"").trim().toLowerCase(); });
+  var email = cli && cli.emails && cli.emails.length ? cli.emails.join(",") : "";
+  if (!email) { switchTab("clients"); return; }
+  var subj = encodeURIComponent("Ордер " + o.order_id);
+  var body = encodeURIComponent("По ордеру " + o.order_id + ": " + (o.cargo_status||"") + " / " + (o.delivery_status||""));
+  window.open("mailto:" + email + "?subject=" + subj + "&body=" + body, "_blank");
+}
+function importExcel() { document.getElementById("excel-inp").click(); }
+function handleExcel(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, {type:"array"});
+      var imported = [];
+      if (wb.SheetNames.indexOf("Запити") >= 0) {
+        var ws = wb.Sheets["Запити"];
+        var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+        var dataRows = rows.slice(3);
+        var idCounter = db.requests.reduce(function(m,r){return Math.max(m,r.id||0);},0)+1;
+        dataRows.forEach(function(row) {
+          var reqNum = String(row[0]||"").trim();
+          if (!reqNum) return;
+          var clientParts = String(row[1]||"").split(String.fromCharCode(10));
+          var routeParts = String(row[2]||"").split(String.fromCharCode(10));
+          var r = { id: idCounter++, req_num: reqNum, date: "", client: clientParts[0]||"", contact: clientParts[1]||"", route: routeParts[0]||"", type: routeParts[1]||"", cargo: String(row[3]||""), weight: String(row[4]||""), sum_log: 0, sum_brok: 0, status: String(row[7]||"Новий запит"), order_id: String(row[8]||""), docs: "", comment: "" };
+          if (!db.requests.find(function(x){return x.req_num===r.req_num;})) imported.push(r);
+        });
+      }
+      db.requests = imported.concat(db.requests);
+      save(); render();
+      alert("Імпортовано: " + imported.length + " запитів");
+    } catch(err) { alert("Помилка: " + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function importRejestrXlsx() { document.getElementById("rejestr-xlsx-inp").click(); }
+function handleRejestrXlsx(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, {type:"array", cellDates:true});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false, dateNF:"dd.mm.yyyy"});
+      if (!db.clients) db.clients = [];
+      var clientName = "ТОВ «Гарні речі»";
+      if (!db.clients.find(function(c){return c.name===clientName;})) { db.clients.unshift({id:nextId(db.clients), name:clientName, contact:"", phone:"", emails:[], tags:["Основний"], notes:""}); }
+      var imported = 0, skipped = 0;
+      var ordId = db.orders.reduce(function(m,o){return Math.max(m,o.id||0);},0)+1;
+      for (var i = 276; i < rows.length; i++) {
+        var row = rows[i];
+        if (!row || !row[1]) continue;
+        var orderNum = String(row[1]).trim();
+        if (!orderNum || orderNum === "номер замовлення") continue;
+        if (db.orders.find(function(o){return o.req_id===orderNum;})) { skipped++; continue; }
+        var getVal = function(idx) {
+          if (!row[idx] && row[idx] !== 0) return "";
+          var v = String(row[idx]).trim();
+          if (v.match(/^\d{4}-\d{2}-\d{2}/)) { var p=v.split("-"); return p[2].substring(0,2)+"."+p[1]+"."+p[0]; }
+          return v;
+        };
+        var incoRaw = getVal(5);
+        var o = { id: ordId++, order_id: "ЗЕД-" + orderNum, client: clientName, route: (incoRaw.split(" ").slice(1).join(" ")||"Китай") + " → Україна", req_id: orderNum, date: getVal(4), incoterms: incoRaw.split(" ")[0]||"", booking: "", carrier: getVal(3), container: getVal(26)||"", cutoff: getVal(6), route_full: "", etd: getVal(8), eta: getVal(10), bol: "", cargo_status: "Очікує завантаження", decl: "", customs_status: "Очікує документи", customs_date: "", resort: "Не потрібно", resort_addr: "", resort_comment: "", logist_ua: getVal(2), transport_ua: "", delivery_status: "Очікує", delivery_date: getVal(13), invoice_sum: parseFloat((getVal(15)||"").replace(/[^0-9.]/g,""))||0, payment_status: "Очікує від фін відділу", payment_date: "", docs: "", notes: getVal(16)+" кор / "+getVal(17)+" кг / "+getVal(18)+" CBM" };
+        db.orders.push(o); imported++;
+      }
+      save(); render();
+      alert("Імпортовано: " + imported + " ордерів. Пропущено: " + skipped);
+    } catch(err) { alert("Помилка: " + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function clearAllData() {
+  if (!confirm("Видалити ВСІ дані?")) return;
+  db = {requests: [], orders: [], clients: []};
+  save(); render();
+  alert("Всі дані видалено");
+}
+
 // ── Init ─────────────────────────────────────────────────────────
 updateCounts();
 render();
