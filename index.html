@@ -734,8 +734,8 @@ function sendOrderMail(orderId) {
     switchTab("clients");
     return;
   }
-  var subj = encodeURIComponent("Ордер " + o.order_id);
-  var body = encodeURIComponent("По ордеру " + o.order_id + ": " + (o.cargo_status||"") + " / " + (o.delivery_status||""));
+  var subj = encodeURIComponent("Статус контейнера — " + o.order_id + (o.container ? " (" + o.container + ")" : ""));
+  var body = encodeURIComponent("Доброго дня!\n\nІнформація по контейнеру:\nORDER ID: " + o.order_id + "\nНомер контейнера: " + (o.container||"—") + "\nСтатус вантажу: " + (o.cargo_status||"—") + "\n\nZ повагою,\nZED Logistics");
   window.open("mailto:" + email + "?subject=" + subj + "&body=" + body, "_blank");
 }
 function importExcel() { document.getElementById("excel-inp").click(); }
