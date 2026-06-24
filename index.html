@@ -414,6 +414,7 @@ function renderRequests() {
       + "<td class='col-id'>" + oid + "</td>"
       + "<td style='white-space:nowrap'>"
       + "<button class='act-btn' onclick='openEditRequest(" + r.id + ")'>✏️</button> "
+      + "<button class='act-btn' style='color:#3b82f6' title='Відправити логістам на прорахунок' onclick='sendToLogist(" + r.id + ")'>📤</button> "
       + (r.status==="Accepted"&&!r.order_id ? "<button class='act-btn' style='color:#16a34a' onclick='createOrder(" + r.id + ")'>→ Ордер</button> " : "")
       + "<button class='act-btn del' onclick='deleteRequest(" + r.id + ")'>✕</button>"
       + "</td></tr>";
@@ -874,6 +875,40 @@ function saveClient(id) {
 function deleteClient(id) { if (!confirm("Видалити клієнта?")) return; db.clients = db.clients.filter(function(x){return x.id!==id;}); supaDelete("clients", id); save(); render(); }
 function normName(s) {
   return (s||"").toLowerCase().replace(/[«»"'`’]/g,"").replace(/\s+/g," ").trim();
+}
+
+// Email логістів для прорахунку
+var LOGIST_EMAIL = "anna.berdcihevskaya@gmail.com";
+var ZED_SUPPORT_EMAIL = "anna.berdcihevskaya@gmail.com";
+
+function sendToLogist(reqId) {
+  var r = db.requests.find(function(x){return x.id===reqId;});
+  if (!r) return;
+  var subj = encodeURIComponent("Запит на прорахунок № " + (r.req_num||""));
+  var lines = [
+    "Прошу прорахувати логістику по запиту:",
+    "",
+    "№ Запиту: " + (r.req_num||"—"),
+    "Дата: " + (r.date||"—"),
+    "Клієнт: " + (r.client||"—"),
+    "Контакт: " + (r.contact||"—"),
+    "Маршрут: " + (r.route||"—"),
+    "Тип перевезення: " + (r.type||"—"),
+    "Вантаж: " + (r.cargo||"—"),
+    "Вага / обсяг / місця: " + (r.weight||"—"),
+    "Менеджер: " + (r.manager||"—"),
+    (r.comment ? "\nКоментар: " + r.comment : ""),
+    "",
+    "Дякую!"
+  ];
+  var body = encodeURIComponent(lines.join("\n"));
+  var cc = encodeURIComponent(ZED_SUPPORT_EMAIL);
+  window.open("mailto:" + LOGIST_EMAIL + "?cc=" + cc + "&subject=" + subj + "&body=" + body, "_blank");
+  // Optionally bump status
+  if (r.status === "Новий запит") {
+    r.status = "Прораховується";
+    save(); render();
+  }
 }
 
 function sendOrderMail(orderId) {
