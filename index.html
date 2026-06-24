@@ -98,6 +98,9 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
 .cc-email{font-size:12px;color:#3b82f6;margin-bottom:2px}
 .cc-tag{display:inline-block;background:#fef3c7;color:#92400e;font-size:10px;padding:2px 8px;border-radius:10px;margin-right:4px}
 .cc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+
+.pill-select{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;border:none;cursor:pointer;font-family:inherit;-webkit-appearance:none;-moz-appearance:none;appearance:none;text-align:center;max-width:140px}
+.pill-select:focus{outline:2px solid rgba(0,0,0,.1)}
 </style>
 </head>
 <body>
@@ -166,6 +169,10 @@ function reqPill(s) { return statusPill(s, REQ_STATUS_MAP); }
 function custPill(s) {
   var m = {"Очікує документи":"p-calc","Документи подані":"p-book","На митниці":"p-wait","Митний огляд":"p-wait","Розмитнено":"p-clear","Затримано":"p-reject"};
   return statusPill(s, m);
+}
+function payCls(s) {
+  var m = {"Очікує від фін відділу":"p-calc","Виставлено":"p-invoice","Оплачено":"p-paid","Прострочено":"p-late"};
+  return m[s] || "p-calc";
 }
 function payPill(s) {
   var m = {"Очікує від фін відділу":"p-calc","Виставлено":"p-invoice","Оплачено":"p-paid","Прострочено":"p-late"};
@@ -444,7 +451,7 @@ function renderOrders() {
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>ІНКОТЕРМС</th><th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
     + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МИТНИЦЯ</th>"
-    + "<th>ДОСТАВКА UA</th><th class='col-sum'>ІНВОЙС ₴</th><th>ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ДОСТАВКА UA</th><th class='col-sum'>ІНВОЙС / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
@@ -458,8 +465,12 @@ function renderOrders() {
       + "<td>" + statusPill(o.cargo_status, {"В морі":"p-book","В дорозі":"p-wait","Прибув":"p-clear","Завантажено":"p-new"}) + "</td>"
       + "<td>" + custPill(o.customs_status) + "</td>"
       + "<td>" + delivPill(o.delivery_status) + "</td>"
-      + "<td class='col-sum' style='font-weight:600;font-size:12px'>" + (o.invoice_sum||0).toLocaleString("uk-UA") + "</td>"
-      + "<td>" + payPill(o.payment_status) + "</td>"
+      + "<td class='col-sum'>"
+      + "<div style='font-weight:600;font-size:12px;margin-bottom:4px'>" + (o.invoice_sum||0).toLocaleString("uk-UA") + " ₴</div>"
+      + "<select class='pill-select " + payCls(o.payment_status) + "' onchange='updatePayStatus(" + o.id + ",this.value)'>"
+      + PAYMENT_STATUSES.map(function(s){ return "<option" + (o.payment_status===s?" selected":"") + ">" + s + "</option>"; }).join("")
+      + "</select>"
+      + "</td>"
       + "<td style='text-align:center'>"
       + (o.docs ? "<a href='" + o.docs + "' target='_blank' style='color:#f59e0b;font-size:16px;text-decoration:none'>📁</a>" : "<span style='color:#d1d5db'>—</span>")
       + "</td>"
@@ -708,6 +719,11 @@ function saveOrder(id) {
     db.orders.unshift(data);
   }
   save(); closeModal(); render();
+}
+
+function updatePayStatus(id, status) {
+  var o = db.orders.find(function(x){return x.id===id;});
+  if (o) { o.payment_status = status; save(); }
 }
 
 function deleteOrder(id) {
