@@ -714,12 +714,26 @@ function saveClient(id) {
   save(); closeModal(); render();
 }
 function deleteClient(id) { if (!confirm("Видалити клієнта?")) return; db.clients = db.clients.filter(function(x){return x.id!==id;}); save(); render(); }
+function normName(s) {
+  return (s||"").toLowerCase().replace(/[«»"'`’]/g,"").replace(/\s+/g," ").trim();
+}
+
 function sendOrderMail(orderId) {
   var o = db.orders.find(function(x){return x.id===orderId;});
   if (!o) return;
-  var cli = (db.clients||[]).find(function(c){ return (c.name||"").trim().toLowerCase()===(o.client||"").trim().toLowerCase(); });
+  var target = normName(o.client);
+  var cli = (db.clients||[]).find(function(c){ return normName(c.name)===target; });
+  // Fallback: if no exact match and only one client has emails, use it
+  if (!cli) {
+    var withEmails = (db.clients||[]).filter(function(c){ return c.emails && c.emails.length; });
+    if (withEmails.length === 1) cli = withEmails[0];
+  }
   var email = cli && cli.emails && cli.emails.length ? cli.emails.join(",") : "";
-  if (!email) { switchTab("clients"); return; }
+  if (!email) {
+    alert("Email не знайдено для клієнта \"" + (o.client||"") + "\". Додайте email у вкладці Клієнти.");
+    switchTab("clients");
+    return;
+  }
   var subj = encodeURIComponent("Ордер " + o.order_id);
   var body = encodeURIComponent("По ордеру " + o.order_id + ": " + (o.cargo_status||"") + " / " + (o.delivery_status||""));
   window.open("mailto:" + email + "?subject=" + subj + "&body=" + body, "_blank");
