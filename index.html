@@ -101,6 +101,8 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
 
 .pill-select{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;border:none;cursor:pointer;font-family:inherit;-webkit-appearance:none;-moz-appearance:none;appearance:none;text-align:center;max-width:140px}
 .pill-select:focus{outline:2px solid rgba(0,0,0,.1)}
+.row-selected{background:#fef9e7 !important}
+.row-selected td{background:#fef9e7 !important}
 </style>
 </head>
 <body>
@@ -147,6 +149,8 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
 var INCOTERMS = ["EXW","FCA","FAS","FOB","CPT","CIP","CFR","CIF","DAP","DPU","DDP"];
 
 var REQ_STATUSES = ["Новий запит","Прораховується","На погодженні","Accepted","Rejected","Відкладено"];
+var NEW_SUBSTATUSES = ["—","Очікую ставку","На розгляді"];
+var MANAGERS = ["—","Оксана К.","Анна Б.","Анна П.","Тетяна Д."];
 var REQ_STATUS_MAP = {
   "Новий запит":"p-new","Прораховується":"p-calc","На погодженні":"p-agree",
   "Accepted":"p-accept","Rejected":"p-reject","Відкладено":"p-delay"
@@ -387,8 +391,8 @@ function renderRequests() {
 
   html += "<div><table><thead><tr>"
     + "<th>№ ЗАПИТУ</th><th>ДАТА</th><th class='col-client'>КЛІЄНТ</th><th class='col-route'>МАРШРУТ / ТИП</th>"
-    + "<th>ВАНТАЖ</th><th class='col-sum'>СУМА ₴</th><th class='col-status'>СТАТУС</th>"
-    + "<th class='col-id'>ORDER ID</th><th>ДІЇ</th>"
+    + "<th>ВАНТАЖ</th><th class='col-sum'>СУМА ₴</th><th class='col-sum'>НАЦІНКА $</th><th class='col-status'>СТАТУС</th>"
+    + "<th>МЕНЕДЖЕР</th><th class='col-id'>ORDER ID</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(r) {
@@ -404,7 +408,9 @@ function renderRequests() {
       + "<td class='col-route'><div style='font-size:12px'>" + r.route + "</div><div style='font-size:10px'><span class='tag'>" + (r.type||"") + "</span></div></td>"
       + "<td><div style='font-size:12px'>" + (r.cargo||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + (r.weight||"") + "</div></td>"
       + "<td class='col-sum' style='font-weight:600;font-size:12px'>" + total.toLocaleString("uk-UA") + " ₴</td>"
-      + "<td class='col-status'>" + reqPill(r.status) + "</td>"
+      + "<td class='col-sum' style='font-weight:600;font-size:12px;color:#16a34a'>$ " + (r.markup||0).toLocaleString("uk-UA") + "</td>"
+      + "<td class='col-status'>" + reqPill(r.status) + (r.status==="Новий запит" && r.sub_status && r.sub_status!=="—" ? "<div style='font-size:10px;color:#6b7280;margin-top:3px'>" + r.sub_status + "</div>" : "") + "</td>"
+      + "<td><select style='font-size:11px;padding:3px 5px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' onchange='updateReqManager(" + r.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((r.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select></td>"
       + "<td class='col-id'>" + oid + "</td>"
       + "<td style='white-space:nowrap'>"
       + "<button class='act-btn' onclick='openEditRequest(" + r.id + ")'>✏️</button> "
@@ -433,11 +439,13 @@ function renderOrders() {
     + "<div class='stat-card'><div class='stat-val'>" + db.orders.length + "</div><div class='stat-label'>ВСЬОГО ОРДЕРІВ</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#0e7490'>" + inTransit + "</div><div class='stat-label'>В ДОРОЗІ</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>" + atCustoms + "</div><div class='stat-label'>НА МИТНИЦІ</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>" + totalSum.toLocaleString("uk-UA") + " ₴</div><div class='stat-label'>ОБОРОТ</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>" + totalSum.toLocaleString("uk-UA") + " ₴</div><div class='stat-label'>ОБОРОТ ПО ІНВОЙСАХ</div></div>"
     + "</div>";
 
+  var selCount = Object.keys(_selectedOrders).length;
   html += "<div class='toolbar'>"
     + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + ordSearch + "' oninput='ordSearch=this.value;renderOrders()'>"
+    + (selCount > 0 ? "<button class='btn' style='background:#ef4444;color:#fff;border-color:#ef4444' onclick='deleteSelectedOrders()'>🗑 Видалити вибрані (" + selCount + ")</button>" : "")
     + "<button class='btn btn-yellow' onclick='openAddOrder()'>+ Новий ордер</button>"
     + "</div>";
 
@@ -447,15 +455,18 @@ function renderOrders() {
     return;
   }
 
+  var allChecked = filtered.length > 0 && filtered.every(function(o){ return _selectedOrders[o.id]; });
   html += "<div><table><thead><tr>"
+    + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>ІНКОТЕРМС</th><th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
     + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МИТНИЦЯ</th>"
-    + "<th>ДОСТАВКА UA</th><th>ПЕРЕТАРКА</th><th class='col-sum'>ІНВОЙС / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ДОСТАВКА UA</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th><th class='col-sum'>ІНВОЙС ₴ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
-    html += "<tr>"
+    html += "<tr class='" + (_selectedOrders[o.id]?"row-selected":"") + "'>"
+      + "<td style='text-align:center'><input type='checkbox' " + (_selectedOrders[o.id]?"checked":"") + " onchange='toggleOrderSelect(" + o.id + ",this.checked)'></td>"
       + "<td><div class='order-id'>" + o.order_id + "</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>" + (o.req_id||"") + " &bull; " + (o.date||"") + "</div></td>"
       + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + o.client + "</div><div style='font-size:10px;color:#6b7280'>" + (o.route||"") + "</div></td>"
       + "<td><span class='tag'>" + (o.incoterms||"—") + "</span></td>"
@@ -470,6 +481,7 @@ function renderOrders() {
       + RESORT_STATUSES.map(function(s){ return "<option" + (o.resort===s?" selected":"") + ">" + s + "</option>"; }).join("")
       + "</select>"
       + "</td>"
+      + "<td><select style='font-size:11px;padding:3px 5px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' onchange='updateOrdManager(" + o.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((o.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select></td>"
       + "<td class='col-sum'>"
       + "<div style='font-weight:600;font-size:12px;margin-bottom:4px'>" + (o.invoice_sum||0).toLocaleString("uk-UA") + " ₴</div>"
       + "<select class='pill-select " + payCls(o.payment_status) + "' onchange='updatePayStatus(" + o.id + ",this.value)'>"
@@ -533,13 +545,18 @@ function showRequestModal(r) {
     + "<div class='form-grid'>"
     + "<div class='field'><label>СУМА ЛОГІСТ ₴</label><input type='number' id='rf-log' value='" + (isEdit ? (r.sum_log||0) : "") + "'></div>"
     + "<div class='field'><label>СУМА БРОКЕР ₴</label><input type='number' id='rf-brok' value='" + (isEdit ? (r.sum_brok||0) : "") + "'></div>"
+    + "<div class='field'><label>НАЦІНКА $ (прибуток ЗЕД)</label><input type='number' id='rf-markup' value='" + (isEdit ? (r.markup||0) : "") + "'></div>"
     + "</div>"
     + "<div class='section-title'>Рішення</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>СТАТУС</label><select id='rf-status'>"
+    + "<div class='field'><label>СТАТУС</label><select id='rf-status' onchange='toggleSubStatus()'>"
     + REQ_STATUSES.map(function(s){return "<option" + ((isEdit&&r.status===s)?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select></div>"
+    + "<div class='field' id='substatus-field' style='display:" + ((isEdit&&r.status==="Новий запит")||(!isEdit)?"block":"none") + "'><label>ПІДСТАТУС</label><select id='rf-substatus'>"
+    + NEW_SUBSTATUSES.map(function(s){return "<option" + ((isEdit&&r.sub_status===s)?" selected":"") + ">" + s + "</option>";}).join("")
+    + "</select></div>"
     + "<div class='field'><label>ORDER ID</label><input id='rf-oid' value='" + escQ(autoOid) + "' placeholder='ЗЕД-23-06-01'></div>"
+    + "<div class='field'><label>МЕНЕДЖЕР</label><select id='rf-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&r.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
     + "</div>"
     + "<div class='form-grid full'>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ КЛІЄНТА (OneDrive)</label><input id='rf-docs' value='" + escQ(isEdit ? (r.docs||"") : "") + "' placeholder='https://...'></div>"
@@ -553,6 +570,12 @@ function showRequestModal(r) {
   document.getElementById("modal-area").innerHTML = html;
 }
 
+function toggleSubStatus() {
+  var status = gv("rf-status");
+  var field = document.getElementById("substatus-field");
+  if (field) field.style.display = (status === "Новий запит") ? "block" : "none";
+}
+
 function saveRequest(id) {
   var client = gv("rf-client").trim();
   if (!client) { alert("Введіть клієнта"); return; }
@@ -560,8 +583,8 @@ function saveRequest(id) {
     req_num: gv("rf-num"), date: gv("rf-date"), client: client,
     contact: gv("rf-contact"), route: gv("rf-route"), type: gv("rf-type"),
     cargo: gv("rf-cargo"), weight: gv("rf-weight"),
-    sum_log: parseFloat(gv("rf-log"))||0, sum_brok: parseFloat(gv("rf-brok"))||0,
-    status: gv("rf-status"), order_id: gv("rf-oid"),
+    sum_log: parseFloat(gv("rf-log"))||0, sum_brok: parseFloat(gv("rf-brok"))||0, markup: parseFloat(gv("rf-markup"))||0,
+    status: gv("rf-status"), sub_status: gv("rf-status")==="Новий запит" ? gv("rf-substatus") : "", order_id: gv("rf-oid"), manager: gv("rf-manager"),
     docs: gv("rf-docs"), comment: gv("rf-comment")
   };
   if (id) {
@@ -683,10 +706,11 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Фінанси</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>СУМА ІНВОЙСУ ₴</label><input type='number' id='of-inv' value='" + (isEdit ? (o.invoice_sum||0) : "") + "'></div>"
+    + "<div class='field'><label>ІНВОЙС ₴ (повна сума витрат)</label><input type='number' id='of-inv' value='" + (isEdit ? (o.invoice_sum||0) : "") + "'></div>"
     + "<div class='field'><label>СТАТУС ОПЛАТИ</label>" + sel("of-pay", PAYMENT_STATUSES, isEdit ? o.payment_status : "Очікує від фін відділу") + "</div>"
     + "<div class='field'><label>ДАТА ОПЛАТИ</label><input id='of-paydate' value='" + escQ(isEdit ? (o.payment_date||"") : "") + "'></div>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ ПО ОРДЕРУ (OneDrive)</label><input id='of-docs' value='" + escQ(isEdit ? (o.docs||"") : "") + "' placeholder='https://...'></div>"
+    + "<div class='field'><label>МЕНЕДЖЕР</label><select id='of-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&o.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
     + "</div>"
     + "<div class='form-grid full'><div class='field'><label>ПРИМІТКИ</label><textarea id='of-notes'>" + (isEdit ? (o.notes||"") : "") + "</textarea></div></div>"
 
@@ -714,7 +738,7 @@ function saveOrder(id) {
     delivery_status: gv("of-deliv"), delivery_date: gv("of-delivdate"),
     invoice_sum: parseFloat(gv("of-inv"))||0,
     payment_status: gv("of-pay"), payment_date: gv("of-paydate"),
-    docs: gv("of-docs"), notes: gv("of-notes")
+    docs: gv("of-docs"), notes: gv("of-notes"), manager: gv("of-manager")
   };
   if (id) {
     var ord = db.orders.find(function(x){return x.id===id;});
@@ -734,6 +758,44 @@ function resortCls(s) {
 function updateResort(id, status) {
   var o = db.orders.find(function(x){return x.id===id;});
   if (o) { o.resort = status; save(); }
+}
+
+var _selectedOrders = {};
+
+function updateReqManager(id, val) {
+  var r = db.requests.find(function(x){return x.id===id;});
+  if (r) { r.manager = val; save(); }
+}
+
+function updateOrdManager(id, val) {
+  var o = db.orders.find(function(x){return x.id===id;});
+  if (o) { o.manager = val; save(); }
+}
+
+function toggleOrderSelect(id, checked) {
+  if (checked) _selectedOrders[id] = true;
+  else delete _selectedOrders[id];
+  renderOrders();
+}
+
+function toggleAllOrders(checked) {
+  var filtered = db.orders.filter(function(o) {
+    var q = ordSearch.toLowerCase();
+    return !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route||"").toLowerCase().indexOf(q) >= 0;
+  });
+  if (checked) filtered.forEach(function(o){ _selectedOrders[o.id] = true; });
+  else _selectedOrders = {};
+  renderOrders();
+}
+
+function deleteSelectedOrders() {
+  var ids = Object.keys(_selectedOrders).map(Number);
+  if (!ids.length) return;
+  if (!confirm("Видалити вибрані ордери (" + ids.length + ")?")) return;
+  ids.forEach(function(id){ supaDelete("orders", id); });
+  db.orders = db.orders.filter(function(o){ return ids.indexOf(o.id) < 0; });
+  _selectedOrders = {};
+  save(); render();
 }
 
 function updatePayStatus(id, status) {
