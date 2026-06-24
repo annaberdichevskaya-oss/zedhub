@@ -176,16 +176,63 @@ function delivPill(s) {
   return statusPill(s, m);
 }
 
-// ── Data ────────────────────────────────────────────────────────
-function loadData() {
+// ── Data (Supabase + localStorage hybrid) ───────────────────────
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var LS_KEY = "zedhub_v2";
+
+function supaHeaders() {
+  return { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" };
+}
+
+function loadLocal() {
   try {
-    var s = localStorage.getItem("zedhub_v1");
+    var s = localStorage.getItem(LS_KEY);
     if (s) {
       var d = JSON.parse(s);
-      if (d && d.requests) return d;
+      if (d && d.requests) { if (!d.clients) d.clients = []; return d; }
     }
   } catch(e) {}
-  return {requests: getSampleRequests(), orders: getSampleOrders()};
+  return {requests: [], orders: [], clients: []};
+}
+
+async function supaFetch(table) {
+  var res = await fetch(SUPA_BASE + "/" + table + "?select=id,data&limit=10000", { headers: supaHeaders() });
+  var rows = await res.json();
+  return Array.isArray(rows) ? rows.map(function(r){ var d = r.data||{}; d.id = r.id; return d; }) : [];
+}
+
+async function cloudLoad() {
+  var results = await Promise.all([ supaFetch("requests"), supaFetch("orders"), supaFetch("clients") ]);
+  return { requests: results[0], orders: results[1], clients: results[2] };
+}
+
+// Sync queue
+var _syncQueue = [];
+var _syncTimer = null;
+
+function queueSync(table, record) {
+  _syncQueue.push({ table: table, record: record });
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(flushSync, 1000);
+}
+
+async function flushSync() {
+  var queue = _syncQueue.slice();
+  _syncQueue = [];
+  for (var i = 0; i < queue.length; i++) {
+    var item = queue[i];
+    try {
+      await fetch(SUPA_BASE + "/" + item.table, {
+        method: "POST", headers: supaHeaders(),
+        body: JSON.stringify({ id: item.record.id, data: item.record, updated_at: new Date().toISOString() })
+      });
+    } catch(e) {}
+  }
+}
+
+async function supaDelete(table, id) {
+  try { await fetch(SUPA_BASE + "/" + table + "?id=eq." + id, { method: "DELETE", headers: supaHeaders() }); } catch(e) {}
 }
 
 function getSampleRequests() {
@@ -221,11 +268,27 @@ function getSampleOrders() {
   ];
 }
 
-var db = loadData();
+var db = loadLocal();
 
 function save() {
-  try { localStorage.setItem("zedhub_v1", JSON.stringify(db)); } catch(e) {}
+  try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
   updateCounts();
+  // Sync all to cloud in background
+  db.requests.forEach(function(r){ queueSync("requests", r); });
+  db.orders.forEach(function(o){ queueSync("orders", o); });
+  (db.clients||[]).forEach(function(c){ queueSync("clients", c); });
+}
+
+async function initCloud() {
+  try {
+    var fresh = await cloudLoad();
+    if (fresh && (fresh.requests.length || fresh.orders.length || fresh.clients.length)) {
+      db = fresh;
+      try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
+      render();
+      updateCounts();
+    }
+  } catch(e) {}
 }
 
 function updateCounts() {
@@ -509,6 +572,7 @@ function saveRequest(id) {
 function deleteRequest(id) {
   if (!confirm("Видалити запит?")) return;
   db.requests = db.requests.filter(function(x){return x.id!==id;});
+  supaDelete("requests", id);
   save(); render();
 }
 
@@ -649,6 +713,7 @@ function saveOrder(id) {
 function deleteOrder(id) {
   if (!confirm("Видалити ордер?")) return;
   db.orders = db.orders.filter(function(x){return x.id!==id;});
+  supaDelete("orders", id);
   save(); render();
 }
 
@@ -713,7 +778,7 @@ function saveClient(id) {
   else { data.id = nextId(db.clients); db.clients.unshift(data); }
   save(); closeModal(); render();
 }
-function deleteClient(id) { if (!confirm("Видалити клієнта?")) return; db.clients = db.clients.filter(function(x){return x.id!==id;}); save(); render(); }
+function deleteClient(id) { if (!confirm("Видалити клієнта?")) return; db.clients = db.clients.filter(function(x){return x.id!==id;}); supaDelete("clients", id); save(); render(); }
 function normName(s) {
   return (s||"").toLowerCase().replace(/[«»"'`’]/g,"").replace(/\s+/g," ").trim();
 }
@@ -813,6 +878,7 @@ function clearAllData() {
 // ── Init ─────────────────────────────────────────────────────────
 updateCounts();
 render();
+initCloud();
 </script>
 </body>
 </html>
