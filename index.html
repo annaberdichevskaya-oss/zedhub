@@ -541,6 +541,7 @@ function showRequestModal(r) {
     + "</select></div>"
     + "<div class='field'><label>ВАНТАЖ</label><input id='rf-cargo' value='" + escQ(isEdit ? (r.cargo||"") : "") + "'></div>"
     + "<div class='field'><label>ВАГА / ОБСЯГ / МІСЦЯ</label><input id='rf-weight' value='" + escQ(isEdit ? (r.weight||"") : "") + "'></div>"
+    + "<div class='field'><label>ДАТА ГОТОВНОСТІ ВАНТАЖУ</label><input id='rf-ready' value='" + escQ(isEdit ? (r.ready_date||"") : "") + "' placeholder='дд.мм.рррр'></div>"
     + "</div>"
     + "<div class='section-title'>Прорахунок</div>"
     + "<div class='form-grid'>"
@@ -583,7 +584,7 @@ function saveRequest(id) {
   var data = {
     req_num: gv("rf-num"), date: gv("rf-date"), client: client,
     contact: gv("rf-contact"), route: gv("rf-route"), type: gv("rf-type"),
-    cargo: gv("rf-cargo"), weight: gv("rf-weight"),
+    cargo: gv("rf-cargo"), weight: gv("rf-weight"), ready_date: gv("rf-ready"),
     sum_log: parseFloat(gv("rf-log"))||0, sum_brok: parseFloat(gv("rf-brok"))||0, markup: parseFloat(gv("rf-markup"))||0,
     status: gv("rf-status"), sub_status: gv("rf-status")==="Новий запит" ? gv("rf-substatus") : "", order_id: gv("rf-oid"), manager: gv("rf-manager"),
     docs: gv("rf-docs"), comment: gv("rf-comment")
@@ -896,6 +897,7 @@ function sendToLogist(reqId) {
     "Тип перевезення: " + (r.type||"—"),
     "Вантаж: " + (r.cargo||"—"),
     "Вага / обсяг / місця: " + (r.weight||"—"),
+    "Дата готовності вантажу: " + (r.ready_date||"—"),
     "Менеджер: " + (r.manager||"—"),
     (r.comment ? "\nКоментар: " + r.comment : ""),
     "",
