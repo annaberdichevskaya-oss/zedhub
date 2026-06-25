@@ -168,7 +168,7 @@ var REQ_STATUS_MAP = {
   "Accepted":"p-accept","Rejected":"p-reject","Відкладено":"p-delay"
 };
 
-var CARGO_STATUSES = ["Очікує завантаження","Завантажено","Виїхав","В дорозі","Прибув до порту","На борту","В морі","Прибув","TBD"];
+var CARGO_STATUSES = ["Очікує завантаження","Завантажено","В дорозі","Прибув","Розвантажено","TBD"];
 var CUSTOMS_STATUSES = ["Очікує документи","Документи подані","На митниці","Митний огляд","Розмитнено","Затримано","TBD"];
 var DELIVERY_STATUSES = ["Очікує","Транспорт призначено","Завантажено","В дорозі","Доставлено","Потребує уточнення","TBD"];
 var PAYMENT_STATUSES = ["Очікує від фін відділу","Виставлено","Оплачено","Прострочено","TBD"];
@@ -452,7 +452,7 @@ function renderOrders() {
     return matchSearch && matchManager && matchCargo;
   });
 
-  var inTransit = db.orders.filter(function(o){return o.cargo_status==="В морі"||o.cargo_status==="В дорозі";}).length;
+  var inTransit = db.orders.filter(function(o){return o.cargo_status==="В дорозі";}).length;
   var atCustoms = db.orders.filter(function(o){return o.customs_status==="На митниці"||o.customs_status==="Митний огляд";}).length;
   var delivered = db.orders.filter(function(o){return o.delivery_status==="Доставлено";}).length;
   var totalSum = db.orders.reduce(function(s,o){return s+(o.invoice_sum||0);},0);
@@ -503,7 +503,7 @@ function renderOrders() {
       + "<td><div style='font-size:11px'>" + (o.booking||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + (o.container||"") + "</div></td>"
       + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + (o.cutoff||"—") + "</td>"
       + "<td><div style='font-size:11px'>" + (o.etd||"—") + "</div><div style='font-size:11px;color:#16a34a'>" + (o.eta||"") + "</div></td>"
-      + "<td>" + statusPill(o.cargo_status, {"В морі":"p-book","В дорозі":"p-wait","Прибув":"p-clear","Завантажено":"p-new"}) + "</td>"
+      + "<td>" + statusPill(o.cargo_status, {"Очікує завантаження":"p-calc","Завантажено":"p-new","В дорозі":"p-book","Прибув":"p-wait","Розвантажено":"p-clear","TBD":"p-reject"}) + "</td>"
       + "<td>" + custPill(o.customs_status) + "</td>"
       + "<td>" + delivPill(o.delivery_status) + "</td>"
       + "<td>"
