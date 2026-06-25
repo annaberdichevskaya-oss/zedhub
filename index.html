@@ -353,6 +353,8 @@ var currentTab = "requests";
 var reqSearch = "";
 var reqFilter = "";
 var ordSearch = "";
+var ordManagerFilter = "";
+var ordCargoFilter = "";
 
 function switchTab(tab) {
   currentTab = tab;
@@ -444,7 +446,10 @@ function renderRequests() {
 function renderOrders() {
   var filtered = db.orders.filter(function(o) {
     var q = ordSearch.toLowerCase();
-    return !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route||"").toLowerCase().indexOf(q) >= 0;
+    var matchSearch = !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route||"").toLowerCase().indexOf(q) >= 0;
+    var matchManager = !ordManagerFilter || (o.manager||"") === ordManagerFilter;
+    var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
+    return matchSearch && matchManager && matchCargo;
   });
 
   var inTransit = db.orders.filter(function(o){return o.cargo_status==="В морі"||o.cargo_status==="В дорозі";}).length;
@@ -462,6 +467,14 @@ function renderOrders() {
   var selCount = Object.keys(_selectedOrders).length;
   html += "<div class='toolbar'>"
     + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + ordSearch + "' oninput='ordSearch=this.value;renderOrders()'>"
+    + "<select class='filter-sel' onchange='ordManagerFilter=this.value;renderOrders()'>"
+    + "<option value=''>👤 Всі менеджери</option>"
+    + MANAGERS.filter(function(m){return m!=="—";}).map(function(m){return "<option value='" + m + "'" + (ordManagerFilter===m?" selected":"") + ">" + m + "</option>";}).join("")
+    + "</select>"
+    + "<select class='filter-sel' onchange='ordCargoFilter=this.value;renderOrders()'>"
+    + "<option value=''>📦 Всі статуси вантажу</option>"
+    + CARGO_STATUSES.map(function(s){return "<option value='" + s + "'" + (ordCargoFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
+    + "</select>"
     + (selCount > 0 ? "<button class='btn' style='background:#ef4444;color:#fff;border-color:#ef4444' onclick='deleteSelectedOrders()'>🗑 Видалити вибрані (" + selCount + ")</button>" : "")
     + "<button class='btn btn-yellow' onclick='openAddOrder()'>+ Новий ордер</button>"
     + "</div>";
@@ -853,19 +866,31 @@ function renderClients() {
     var q = cliSearch.toLowerCase();
     return !q || c.name.toLowerCase().indexOf(q) >= 0 || (c.contact||"").toLowerCase().indexOf(q) >= 0 || (c.emails||[]).join(" ").toLowerCase().indexOf(q) >= 0;
   });
+  filtered.sort(function(a,b){ return (a.name||"").localeCompare(b.name||"", "uk"); });
   var html = "<div class='toolbar'><input class='search-box' placeholder='Пошук клієнта...' value='" + cliSearch + "' oninput='cliSearch=this.value;renderClients()'><button class='btn btn-yellow' onclick='openAddClient()'>+ Додати клієнта</button></div>";
   if (!filtered.length) {
     html += "<div style='text-align:center;padding:60px;color:#9ca3af'>Додайте першого клієнта</div>";
     document.getElementById("main-content").innerHTML = html;
     return;
   }
-  html += "<div class='client-grid'>";
+  html += "<div><table><thead><tr>"
+    + "<th>КЛІЄНТ</th><th>КОНТАКТ</th><th>ТЕЛЕФОН</th><th>EMAIL</th><th>ТЕГИ</th><th>ДІЇ</th>"
+    + "</tr></thead><tbody>";
   filtered.forEach(function(c) {
-    var emails = (c.emails||[]).map(function(e){ return "<div class='cc-email'>✉️ " + e + "</div>"; }).join("");
+    var emails = (c.emails||[]).join(", ");
     var tags = (c.tags||[]).map(function(t){return "<span class='cc-tag'>" + t + "</span>";}).join(" ");
-    html += "<div class='client-card'><div class='cc-name'>" + c.name + "</div><div class='cc-company'>" + (c.contact||"") + (c.phone ? " • " + c.phone : "") + "</div><div class='cc-emails'>" + (emails||"<div style='color:#d1d5db;font-size:12px'>Email не вказано</div>") + "</div>" + (tags ? "<div style='margin-bottom:8px'>" + tags + "</div>" : "") + (c.notes ? "<div style='font-size:11px;color:#9ca3af;margin-bottom:8px'>" + c.notes + "</div>" : "") + "<div class='cc-actions'><button class='act-btn' onclick='openEditClient(" + c.id + ")'>✏️ Редагувати</button><button class='act-btn del' onclick='deleteClient(" + c.id + ")'>✕</button></div></div>";
+    html += "<tr>"
+      + "<td style='font-weight:600'>" + c.name + "</td>"
+      + "<td>" + (c.contact||"—") + "</td>"
+      + "<td style='white-space:nowrap'>" + (c.phone||"—") + "</td>"
+      + "<td style='font-size:11px;color:#3b82f6'>" + (emails||"—") + "</td>"
+      + "<td>" + (tags||"") + "</td>"
+      + "<td style='white-space:nowrap'>"
+      + "<button class='act-btn' onclick='openEditClient(" + c.id + ")'>✏️</button> "
+      + "<button class='act-btn del' onclick='deleteClient(" + c.id + ")'>✕</button>"
+      + "</td></tr>";
   });
-  html += "</div>";
+  html += "</tbody></table></div>";
   document.getElementById("main-content").innerHTML = html;
 }
 function openAddClient() { showClientModal(null); }
