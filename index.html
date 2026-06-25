@@ -103,6 +103,15 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
 .pill-select:focus{outline:2px solid rgba(0,0,0,.1)}
 .row-selected{background:#fef9e7 !important}
 .row-selected td{background:#fef9e7 !important}
+
+.ref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.ref-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px}
+.ref-title{font-size:15px;font-weight:700;color:#1a1a2e;margin-bottom:8px}
+.ref-text{font-size:13px;color:#374151;margin-bottom:10px;line-height:1.5;white-space:pre-wrap}
+.ref-links{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.ref-link{font-size:12px;color:#3b82f6;text-decoration:none;word-break:break-all}
+.ref-link:hover{text-decoration:underline}
+.ref-actions{display:flex;gap:6px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -138,6 +147,9 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   <button class="tab-btn" id="tab-cli" onclick="switchTab('clients')">
     👥 Клієнти <span class="tab-count" id="cnt-cli">0</span>
   </button>
+  <button class="tab-btn" id="tab-ref" onclick="switchTab('reference')">
+    📚 Довідник <span class="tab-count" id="cnt-ref">0</span>
+  </button>
 </div>
 
 <div class="content" id="main-content"></div>
@@ -156,12 +168,12 @@ var REQ_STATUS_MAP = {
   "Accepted":"p-accept","Rejected":"p-reject","Відкладено":"p-delay"
 };
 
-var CARGO_STATUSES = ["Очікує завантаження","Завантажено","Виїхав","В дорозі","Прибув до порту","На борту","В морі","Прибув"];
-var CUSTOMS_STATUSES = ["Очікує документи","Документи подані","На митниці","Митний огляд","Розмитнено","Затримано"];
-var DELIVERY_STATUSES = ["Очікує","Транспорт призначено","Завантажено","В дорозі","Доставлено","Потребує уточнення"];
-var PAYMENT_STATUSES = ["Очікує від фін відділу","Виставлено","Оплачено","Прострочено"];
+var CARGO_STATUSES = ["Очікує завантаження","Завантажено","Виїхав","В дорозі","Прибув до порту","На борту","В морі","Прибув","TBD"];
+var CUSTOMS_STATUSES = ["Очікує документи","Документи подані","На митниці","Митний огляд","Розмитнено","Затримано","TBD"];
+var DELIVERY_STATUSES = ["Очікує","Транспорт призначено","Завантажено","В дорозі","Доставлено","Потребує уточнення","TBD"];
+var PAYMENT_STATUSES = ["Очікує від фін відділу","Виставлено","Оплачено","Прострочено","TBD"];
 var BOOKING_STATUSES = ["Очікує букінг","Отримано","Підтверджено"];
-var RESORT_STATUSES = ["Не потрібна","В процесі","Завершено"];
+var RESORT_STATUSES = ["Не потрібна","В процесі","Завершено","TBD"];
 var TRANSPORT_TYPES = ["Авто","Море","Авіа","Комбіноване"];
 
 function statusPill(status, map) {
@@ -175,15 +187,15 @@ function custPill(s) {
   return statusPill(s, m);
 }
 function payCls(s) {
-  var m = {"Очікує від фін відділу":"p-calc","Виставлено":"p-invoice","Оплачено":"p-paid","Прострочено":"p-late"};
+  var m = {"Очікує від фін відділу":"p-calc","Виставлено":"p-invoice","Оплачено":"p-paid","Прострочено":"p-late","TBD":"p-reject"};
   return m[s] || "p-calc";
 }
 function payPill(s) {
-  var m = {"Очікує від фін відділу":"p-calc","Виставлено":"p-invoice","Оплачено":"p-paid","Прострочено":"p-late"};
+  var m = {"Очікує від фін відділу":"p-calc","Виставлено":"p-invoice","Оплачено":"p-paid","Прострочено":"p-late","TBD":"p-reject"};
   return statusPill(s, m);
 }
 function delivPill(s) {
-  var m = {"Очікує":"p-calc","Транспорт призначено":"p-book","Завантажено":"p-book","В дорозі":"p-wait","Доставлено":"p-deliver","Потребує уточнення":"p-reject"};
+  var m = {"Очікує":"p-calc","Транспорт призначено":"p-book","Завантажено":"p-book","В дорозі":"p-wait","Доставлено":"p-deliver","Потребує уточнення":"p-reject","TBD":"p-reject"};
   return statusPill(s, m);
 }
 
@@ -204,7 +216,7 @@ function loadLocal() {
       if (d && d.requests) { if (!d.clients) d.clients = []; return d; }
     }
   } catch(e) {}
-  return {requests: [], orders: [], clients: []};
+  return {requests: [], orders: [], clients: [], references: []};
 }
 
 async function supaFetch(table) {
@@ -214,8 +226,8 @@ async function supaFetch(table) {
 }
 
 async function cloudLoad() {
-  var results = await Promise.all([ supaFetch("requests"), supaFetch("orders"), supaFetch("clients") ]);
-  return { requests: results[0], orders: results[1], clients: results[2] };
+  var results = await Promise.all([ supaFetch("requests"), supaFetch("orders"), supaFetch("clients"), supaFetch("refs") ]);
+  return { requests: results[0], orders: results[1], clients: results[2], references: results[3] };
 }
 
 // Sync queue
@@ -308,6 +320,8 @@ function updateCounts() {
   document.getElementById("cnt-ord").textContent = db.orders.length;
   var cliEl = document.getElementById("cnt-cli");
   if (cliEl) cliEl.textContent = (db.clients||[]).length;
+  var refEl = document.getElementById("cnt-ref");
+  if (refEl) refEl.textContent = (db.references||[]).length;
 }
 
 function exportBackup() {
@@ -345,13 +359,15 @@ function switchTab(tab) {
   document.getElementById("tab-req").classList.toggle("active", tab === "requests");
   document.getElementById("tab-ord").classList.toggle("active", tab === "orders");
   document.getElementById("tab-cli").classList.toggle("active", tab === "clients");
+  document.getElementById("tab-ref").classList.toggle("active", tab === "reference");
   render();
 }
 
 function render() {
   if (currentTab === "requests") renderRequests();
   else if (currentTab === "orders") renderOrders();
-  else renderClients();
+  else if (currentTab === "clients") renderClients();
+  else renderReference();
 }
 
 // ── REQUESTS ─────────────────────────────────────────────────────
@@ -754,7 +770,7 @@ function saveOrder(id) {
 }
 
 function resortCls(s) {
-  var m = {"Не потрібна":"p-calc","В процесі":"p-wait","Завершено":"p-paid"};
+  var m = {"Не потрібна":"p-calc","В процесі":"p-wait","Завершено":"p-paid","TBD":"p-reject"};
   return m[s] || "p-calc";
 }
 
@@ -915,6 +931,94 @@ function sendToLogist(reqId) {
   }
 }
 
+// ── REFERENCE (Довідник) ─────────────────────────────────────────
+var refSearch = "";
+
+function renderReference() {
+  if (!db.references) db.references = [];
+  var filtered = db.references.filter(function(x) {
+    var q = refSearch.toLowerCase();
+    return !q || (x.title||"").toLowerCase().indexOf(q) >= 0 || (x.text||"").toLowerCase().indexOf(q) >= 0;
+  });
+  var html = "<div class='toolbar'>"
+    + "<input class='search-box' placeholder='🔍 Пошук у довіднику...' value='" + refSearch + "' oninput='refSearch=this.value;renderReference()'>"
+    + "<button class='btn btn-yellow' onclick='openAddRef()'>+ Додати запис</button>"
+    + "</div>";
+  if (!filtered.length) {
+    html += "<div style='text-align:center;padding:60px;color:#9ca3af'>📚<br>" + (refSearch ? "Нічого не знайдено" : "Додайте перший запис у довідник") + "</div>";
+    document.getElementById("main-content").innerHTML = html;
+    return;
+  }
+  html += "<div class='ref-grid'>";
+  filtered.forEach(function(x) {
+    var links = (x.links||[]).map(function(l){
+      var url = l.indexOf("http")===0 ? l : "https://" + l;
+      return "<a href='" + url + "' target='_blank' class='ref-link'>🔗 " + l + "</a>";
+    }).join("");
+    html += "<div class='ref-card'>"
+      + "<div class='ref-title'>" + (x.title||"Без назви") + "</div>"
+      + (x.text ? "<div class='ref-text'>" + x.text.replace(/\n/g,"<br>") + "</div>" : "")
+      + (links ? "<div class='ref-links'>" + links + "</div>" : "")
+      + "<div class='ref-actions'>"
+      + "<button class='act-btn' onclick='openEditRef(" + x.id + ")'>✏️ Редагувати</button>"
+      + "<button class='act-btn del' onclick='deleteRef(" + x.id + ")'>✕</button>"
+      + "</div></div>";
+  });
+  html += "</div>";
+  document.getElementById("main-content").innerHTML = html;
+}
+
+function openAddRef() { showRefModal(null); }
+function openEditRef(id) {
+  var x = db.references.find(function(r){return r.id===id;});
+  if (x) showRefModal(x);
+}
+
+function showRefModal(x) {
+  var isEdit = !!x;
+  var linksStr = isEdit ? (x.links||[]).join("\n") : "";
+  var html = "<div class='modal-bg' id='ref-modal'><div class='modal'>"
+    + "<div class='modal-title'>" + (isEdit ? "✏️ Редагувати запис" : "➕ Новий запис") + "</div>"
+    + "<div class='form-grid full'><div class='field'><label>НАЗВА *</label><input id='rff-title' value='" + escQ(isEdit ? x.title : "") + "' placeholder='Напр. Контакти митного брокера'></div></div>"
+    + "<div class='form-grid full'><div class='field'><label>ТЕКСТ / НОТАТКА</label><textarea id='rff-text' style='min-height:120px'>" + (isEdit ? (x.text||"") : "") + "</textarea></div></div>"
+    + "<div class='form-grid full'><div class='field'><label>🔗 ПОСИЛАННЯ (кожне з нового рядка)</label><textarea id='rff-links' style='min-height:70px' placeholder='https://...'>" + escQ(linksStr) + "</textarea></div></div>"
+    + "<div class='modal-btns'>"
+    + "<button class='btn btn-gray' onclick='closeModal()'>Скасувати</button>"
+    + "<button class='btn btn-yellow' onclick='saveRef(" + (isEdit ? x.id : "null") + ")'>Зберегти</button>"
+    + "</div></div></div>";
+  document.getElementById("modal-area").innerHTML = html;
+}
+
+function saveRef(id) {
+  var title = gv("rff-title").trim();
+  if (!title) { alert("Введіть назву"); return; }
+  var linksRaw = gv("rff-links").trim();
+  var links = linksRaw ? linksRaw.split("\n").map(function(l){return l.trim();}).filter(Boolean) : [];
+  var data = { title: title, text: gv("rff-text"), links: links };
+  if (!db.references) db.references = [];
+  if (id) {
+    var x = db.references.find(function(r){return r.id===id;});
+    Object.assign(x, data);
+  } else {
+    data.id = nextId(db.references);
+    db.references.unshift(data);
+  }
+  saveRefCloud(); closeModal(); render();
+}
+
+function deleteRef(id) {
+  if (!confirm("Видалити запис?")) return;
+  db.references = db.references.filter(function(x){return x.id!==id;});
+  supaDelete("refs", id);
+  saveRefCloud(); render();
+}
+
+function saveRefCloud() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
+  updateCounts();
+  (db.references||[]).forEach(function(x){ queueSync("refs", x); });
+}
+
 function sendOrderMail(orderId) {
   var o = db.orders.find(function(x){return x.id===orderId;});
   if (!o) return;
@@ -1002,7 +1106,7 @@ function handleRejestrXlsx(file) {
 }
 function clearAllData() {
   if (!confirm("Видалити ВСІ дані?")) return;
-  db = {requests: [], orders: [], clients: []};
+  db = {requests: [], orders: [], clients: [], references: []};
   save(); render();
   alert("Всі дані видалено");
 }
