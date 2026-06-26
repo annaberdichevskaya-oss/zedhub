@@ -163,7 +163,7 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
 <script>
 var INCOTERMS = ["EXW","FCA","FAS","FOB","CPT","CIP","CFR","CIF","DAP","DPU","DDP"];
 
-var REQ_STATUSES = ["Новий запит","Прораховується","На погодженні","Accepted","Rejected","Відкладено"];
+var REQ_STATUSES = ["Новий запит","Прораховується","На погодженні","Accepted","Rejected"];
 var NEW_SUBSTATUSES = ["—","Очікую ставку","На розгляді"];
 var MANAGERS = ["—","Оксана К.","Анна Б.","Анна П.","Тетяна Д."];
 var LOGISTS = ["—","Влад В.","Лера К.","Надя Л.","Ден Б.","Таня П."];
@@ -650,7 +650,6 @@ function showRequestModal(r) {
     + "<div class='section-title'>Базова інформація</div>"
     + "<div class='form-grid'>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='rf-num' value='" + escQ(num) + "'></div>"
-    + "<div class='field'><label>ДАТА</label>" + dateInput("rf-date", isEdit ? r.date : todayISO) + "</div>"
     + "<div class='field'><label>КЛІЄНТ *</label><select id='rf-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&r.client===c.name)?" selected":"") + ">" + c.name + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>КОНТАКТ</label><input id='rf-contact' value='" + escQ(isEdit ? (r.contact||"") : "") + "'></div>"
     + "<div class='field'><label>МАРШРУТ</label><input id='rf-route' value='" + escQ(isEdit ? r.route : "") + "'></div>"
@@ -700,7 +699,7 @@ function saveRequest(id) {
   var client = gv("rf-client").trim();
   if (!client) { alert("Введіть клієнта"); return; }
   var data = {
-    req_num: gv("rf-num"), date: fromISODate(gv("rf-date")), client: client,
+    req_num: gv("rf-num"), client: client,
     contact: gv("rf-contact"), route: gv("rf-route"), type: gv("rf-type"),
     cargo: gv("rf-cargo"), weight: gv("rf-weight"), ready_date: fromISODate(gv("rf-ready")),
     sum_log: parseFloat(gv("rf-log"))||0, sum_brok: parseFloat(gv("rf-brok"))||0, markup: parseFloat(gv("rf-markup"))||0,
@@ -719,6 +718,7 @@ function saveRequest(id) {
     }
   } else {
     data.id = nextId(db.requests);
+    data.date = new Date().toLocaleDateString("uk-UA");
     db.requests.unshift(data);
     if (data.status === "Accepted") {
       var exists = db.orders.some(function(o){ return o.order_id === data.order_id; });
@@ -753,7 +753,7 @@ function createOrder(reqId) {
     customs_status: "TBD", customs_date: "",
     resort: "Не потрібна", resort_addr: "", resort_comment: "",
     logist_ua: "", transport_ua: "", delivery_status: "Очікує", delivery_date: "",
-    invoice_sum: (r.sum_log||0)+(r.sum_brok||0), payment_status: "Очікує від фін відділу", payment_date: "",
+    invoice_sum: 0, sum_netto: 0, sum_brutto: 0, payment_status: "Очікує від фін відділу", payment_date: "",
     docs: r.docs||"", notes: r.comment||""
   };
   db.orders.unshift(o);
@@ -811,7 +811,7 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Пересортування</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ПЕРЕСОРТУВАННЯ</label>" + sel("of-resort", RESORT_STATUSES, isEdit ? o.resort : "Не потрібно") + "</div>"
+    + "<div class='field'><label>ПЕРЕСОРТУВАННЯ</label>" + sel("of-resort", RESORT_STATUSES, isEdit ? o.resort : "Не потрібна") + "</div>"
     + "<div class='field'><label>СКЛАД / АДРЕСА</label><input id='of-resaddr' value='" + escQ(isEdit ? (o.resort_addr||"") : "") + "'></div>"
     + "</div>"
 
@@ -1287,7 +1287,7 @@ function handleRejestrXlsx(file) {
           return v;
         };
         var incoRaw = getVal(5);
-        var o = { id: ordId++, order_id: "ЗЕД-" + orderNum, client: clientName, route: (incoRaw.split(" ").slice(1).join(" ")||"Китай") + " → Україна", req_id: orderNum, date: getVal(4), incoterms: incoRaw.split(" ")[0]||"", booking: "", carrier: getVal(3), container: getVal(26)||"", cutoff: getVal(6), route_full: "", etd: getVal(8), eta: getVal(10), bol: "", cargo_status: "Очікує завантаження", decl: "", customs_status: "TBD", customs_date: "", resort: "Не потрібна", resort_addr: "", resort_comment: "", logist_ua: getVal(2), transport_ua: "", delivery_status: "Очікує", delivery_date: getVal(13), invoice_sum: parseFloat((getVal(15)||"").replace(/[^0-9.]/g,""))||0, payment_status: "Очікує від фін відділу", payment_date: "", docs: "", notes: getVal(16)+" кор / "+getVal(17)+" кг / "+getVal(18)+" CBM" };
+        var o = { id: ordId++, order_id: "ZED" + orderNum, client: clientName, route: (incoRaw.split(" ").slice(1).join(" ")||"Китай") + " → Україна", req_id: orderNum, date: getVal(4), incoterms: incoRaw.split(" ")[0]||"", booking: "", carrier: getVal(3), container: getVal(26)||"", cutoff: getVal(6), route_full: "", etd: getVal(8), eta: getVal(10), bol: "", cargo_status: "Очікує завантаження", decl: "", customs_status: "TBD", customs_date: "", resort: "Не потрібна", resort_addr: "", resort_comment: "", logist_ua: getVal(2), transport_ua: "", delivery_status: "Очікує", delivery_date: getVal(13), invoice_sum: parseFloat((getVal(15)||"").replace(/[^0-9.]/g,""))||0, payment_status: "Очікує від фін відділу", payment_date: "", docs: "", notes: getVal(16)+" кор / "+getVal(17)+" кг / "+getVal(18)+" CBM" };
         db.orders.push(o); imported++;
       }
       save(); render();
