@@ -514,8 +514,14 @@ function renderOrders() {
   var delivered = db.orders.filter(function(o){return o.delivery_status==="Доставлено";}).length;
   var totalSum = db.orders.reduce(function(s,o){return s+(o.invoice_sum||0);},0);
 
+  var execActive = ordManagerSel.length > 0 || ordLogistSel.length > 0;
+  var ordersStatVal = execActive
+    ? "<span style='color:#f59e0b'>" + filtered.length + "</span><span style='font-size:14px;color:#9ca3af'> / " + db.orders.length + "</span>"
+    : String(db.orders.length);
+  var ordersStatLabel = execActive ? "ОРДЕРІВ (ФІЛЬТР)" : "ВСЬОГО ОРДЕРІВ";
+
   var html = "<div class='stats-bar'>"
-    + "<div class='stat-card'><div class='stat-val'>" + db.orders.length + "</div><div class='stat-label'>ВСЬОГО ОРДЕРІВ</div></div>"
+    + "<div class='stat-card'><div class='stat-val'>" + ordersStatVal + "</div><div class='stat-label'>" + ordersStatLabel + "</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#0e7490'>" + inTransit + "</div><div class='stat-label'>В ДОРОЗІ</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>" + atCustoms + "</div><div class='stat-label'>НА МИТНИЦІ</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>" + totalSum.toLocaleString("uk-UA") + " ₴</div><div class='stat-label'>ОБОРОТ ПО ІНВОЙСАХ</div></div>"
