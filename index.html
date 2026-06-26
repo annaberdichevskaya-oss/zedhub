@@ -490,9 +490,10 @@ function renderOrders() {
   var filtered = db.orders.filter(function(o) {
     var q = ordSearch.toLowerCase();
     var matchSearch = !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route||"").toLowerCase().indexOf(q) >= 0;
-    var matchManager = !ordManagerFilter || (o.manager||"") === ordManagerFilter;
+    var matchManager = ordManagerSel.length===0 || ordManagerSel.indexOf(o.manager||"") >= 0;
+    var matchLogist = ordLogistSel.length===0 || ordLogistSel.indexOf(o.logist||"") >= 0;
     var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
-    return matchSearch && matchManager && matchCargo;
+    return matchSearch && matchManager && matchLogist && matchCargo;
   });
   filtered.sort(function(a,b){
     if (ordSort === "eta" || ordSort === "etd" || ordSort === "cutoff") {
@@ -530,12 +531,12 @@ function renderOrders() {
         if (ordExecOpen) {
           btn += "<div style='position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px;z-index:50;min-width:180px'>"
             + "<div style='font-size:10px;font-weight:700;color:#6b7280;margin-bottom:5px'>МЕНЕДЖЕРИ</div>"
-            + MANAGERS.filter(function(m){return m!=="—";}).map(function(m){
-                return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordManagerSel.indexOf(m)>=0?"checked":"") + " onchange='toggleExecFilter(\"m\",\"" + m + "\")'>" + m + "</label>";
+            + MANAGERS.filter(function(m){return m!=="—";}).map(function(m,idx){
+                return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordManagerSel.indexOf(m)>=0?"checked":"") + " onchange='toggleExecFilter(&quot;m&quot;," + (idx+1) + ")'>" + m + "</label>";
               }).join("")
             + "<div style='font-size:10px;font-weight:700;color:#6b7280;margin:8px 0 5px'>ЛОГІСТИ</div>"
-            + LOGISTS.filter(function(l){return l!=="—";}).map(function(l){
-                return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordLogistSel.indexOf(l)>=0?"checked":"") + " onchange='toggleExecFilter(\"l\",\"" + l + "\")'>" + l + "</label>";
+            + LOGISTS.filter(function(l){return l!=="—";}).map(function(l,idx){
+                return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordLogistSel.indexOf(l)>=0?"checked":"") + " onchange='toggleExecFilter(&quot;l&quot;," + (idx+1) + ")'>" + l + "</label>";
               }).join("")
             + (cnt>0 ? "<button class='btn btn-gray' style='width:100%;margin-top:8px;font-size:11px' onclick='ordManagerSel=[];ordLogistSel=[];renderOrders()'>Скинути</button>" : "")
             + "</div>";
@@ -889,11 +890,15 @@ function updateOrdLogist(id, val) {
   if (o) { o.logist = val; save(); }
 }
 
-function toggleExecFilter(type, name) {
+function toggleExecFilter(type, idx) {
+  var src = type === "m" ? MANAGERS.filter(function(m){return m!=="—";}) : LOGISTS.filter(function(l){return l!=="—";});
+  var name = src[idx-1];
+  if (!name) return;
   var arr = type === "m" ? ordManagerSel : ordLogistSel;
   var i = arr.indexOf(name);
   if (i >= 0) arr.splice(i, 1);
   else arr.push(name);
+  ordExecOpen = true;
   renderOrders();
 }
 
