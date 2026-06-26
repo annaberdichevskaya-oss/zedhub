@@ -1294,6 +1294,26 @@ function clearAllData() {
 updateCounts();
 render();
 initCloud();
+
+// Закривати панель Виконавці при кліку поза нею
+document.addEventListener("mousedown", function(e){
+  if (!ordExecOpen) return;
+  var el = e.target;
+  var insidePanel = false;
+  while (el) {
+    var oc = el.getAttribute ? (el.getAttribute("onclick")||"") : "";
+    var och = el.getAttribute ? (el.getAttribute("onchange")||"") : "";
+    if (oc.indexOf("ordExecOpen") >= 0 || och.indexOf("toggleExecFilter") >= 0
+        || oc.indexOf("toggleExecFilter") >= 0 || oc.indexOf("ordManagerSel=[]") >= 0) {
+      insidePanel = true; break;
+    }
+    el = el.parentElement;
+  }
+  if (!insidePanel) {
+    ordExecOpen = false;
+    renderOrders();
+  }
+});
 </script>
 </body>
 </html>
