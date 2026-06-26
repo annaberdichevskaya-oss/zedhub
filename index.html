@@ -78,6 +78,8 @@ tr:hover td{background:#fafafa}
 .empty-icon{font-size:40px;margin-bottom:12px}
 .empty-text{font-size:14px}
 .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.stats-bar.stats-3{grid-template-columns:repeat(3,1fr)}
+.stats-bar.stats-2{grid-template-columns:repeat(2,1fr)}
 .stat-card{background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .stat-val{font-size:22px;font-weight:700;margin-bottom:2px}
 .stat-label{font-size:10px;color:#9ca3af;letter-spacing:.08em}
@@ -510,10 +512,7 @@ function renderOrders() {
     return ordSort === "new" ? y.localeCompare(x, undefined, {numeric:true}) : x.localeCompare(y, undefined, {numeric:true});
   });
 
-  var inTransit = db.orders.filter(function(o){return o.cargo_status==="В дорозі";}).length;
-  var atCustoms = db.orders.filter(function(o){return o.customs_status==="На митниці"||o.customs_status==="Митний огляд";}).length;
-  var delivered = db.orders.filter(function(o){return o.delivery_status==="Доставлено";}).length;
-  var totalSum = db.orders.reduce(function(s,o){return s+(o.invoice_sum||0);},0);
+  var totalMarkup = filtered.reduce(function(s,o){return s+((o.sum_brutto||0)-(o.sum_netto||0));},0);
 
   var execActive = ordManagerSel.length > 0 || ordLogistSel.length > 0;
   var ordersStatVal = execActive
@@ -521,11 +520,9 @@ function renderOrders() {
     : String(db.orders.length);
   var ordersStatLabel = execActive ? "ОРДЕРІВ (ФІЛЬТР)" : "ВСЬОГО ОРДЕРІВ";
 
-  var html = "<div class='stats-bar'>"
+  var html = "<div class='stats-bar stats-2'>"
     + "<div class='stat-card'><div class='stat-val'>" + ordersStatVal + "</div><div class='stat-label'>" + ordersStatLabel + "</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#0e7490'>" + inTransit + "</div><div class='stat-label'>В ДОРОЗІ</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>" + atCustoms + "</div><div class='stat-label'>НА МИТНИЦІ</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>" + totalSum.toLocaleString("uk-UA") + " ₴</div><div class='stat-label'>ОБОРОТ ПО ІНВОЙСАХ</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + totalMarkup.toLocaleString("uk-UA") + "</div><div class='stat-label'>" + (execActive ? "НАЦІНКА (ФІЛЬТР)" : "ЗАГАЛЬНА НАЦІНКА") + "</div></div>"
     + "</div>";
 
   var selCount = Object.keys(_selectedOrders).length;
@@ -581,7 +578,7 @@ function renderOrders() {
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
     + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МИТНИЦЯ</th>"
-    + "<th>ДОСТАВКА UA</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>ІНВОЙС ₴ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ДОСТАВКА UA</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
@@ -605,7 +602,7 @@ function renderOrders() {
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #dbeafe;background:#f0f7ff;cursor:pointer' title='Логіст' onchange='updateOrdLogist(" + o.id + ",this.value)'>" + LOGISTS.map(function(l){return "<option" + ((o.logist||"—")===l?" selected":"") + ">" + l + "</option>";}).join("") + "</select>"
       + "</div></td>"
       + "<td class='col-sum'>"
-      + "<div style='font-weight:600;font-size:12px;margin-bottom:4px'>" + (o.invoice_sum||0).toLocaleString("uk-UA") + " ₴</div>"
+      + "<div style='font-weight:600;font-size:12px;margin-bottom:4px;color:#16a34a'>$ " + ((o.sum_brutto||0)-(o.sum_netto||0)).toLocaleString("uk-UA") + "</div>"
       + "<select class='pill-select " + payCls(o.payment_status) + "' onchange='updatePayStatus(" + o.id + ",this.value)'>"
       + PAYMENT_STATUSES.map(function(s){ return "<option" + (o.payment_status===s?" selected":"") + ">" + s + "</option>"; }).join("")
       + "</select>"
@@ -828,7 +825,9 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Фінанси</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ІНВОЙС ₴ (повна сума витрат)</label><input type='number' id='of-inv' value='" + (isEdit ? (o.invoice_sum||0) : "") + "'></div>"
+    + "<div class='field'><label>СУМА НЕТТО $ (собівартість)</label><input type='number' id='of-netto' value='" + (isEdit ? (o.sum_netto||0) : "") + "' oninput='calcOrdMarkup()'></div>"
+    + "<div class='field'><label>СУМА БРУТТО $ (клієнту)</label><input type='number' id='of-brutto' value='" + (isEdit ? (o.sum_brutto||0) : "") + "' oninput='calcOrdMarkup()'></div>"
+    + "<div class='field'><label>НАЦІНКА $ (авто)</label><input type='number' id='of-markup' value='" + (isEdit ? ((o.sum_brutto||0)-(o.sum_netto||0)) : "") + "' readonly style='background:#f0fdf4;font-weight:700;color:#16a34a'></div>"
     + "<div class='field'><label>СТАТУС ОПЛАТИ</label>" + sel("of-pay", PAYMENT_STATUSES, isEdit ? o.payment_status : "Очікує від фін відділу") + "</div>"
     + "<div class='field'><label>ДАТА ОПЛАТИ</label>" + dateInput("of-paydate", isEdit ? (o.payment_date||"") : "") + "</div>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ ПО ОРДЕРУ (OneDrive)</label><input id='of-docs' value='" + escQ(isEdit ? (o.docs||"") : "") + "' placeholder='https://...'></div>"
@@ -859,7 +858,7 @@ function saveOrder(id) {
     resort: gv("of-resort"), resort_addr: gv("of-resaddr"),
     logist_ua: gv("of-log"), transport_ua: gv("of-trans"),
     delivery_status: gv("of-deliv"), delivery_date: fromISODate(gv("of-delivdate")),
-    invoice_sum: parseFloat(gv("of-inv"))||0,
+    sum_netto: parseFloat(gv("of-netto"))||0, sum_brutto: parseFloat(gv("of-brutto"))||0, invoice_sum: (parseFloat(gv("of-brutto"))||0)-(parseFloat(gv("of-netto"))||0),
     payment_status: gv("of-pay"), payment_date: fromISODate(gv("of-paydate")),
     docs: gv("of-docs"), notes: gv("of-notes"), manager: gv("of-manager"), logist: gv("of-logist")
   };
@@ -936,6 +935,13 @@ function deleteSelectedOrders() {
   db.orders = db.orders.filter(function(o){ return ids.indexOf(o.id) < 0; });
   _selectedOrders = {};
   save(); render();
+}
+
+function calcOrdMarkup() {
+  var n = parseFloat(gv("of-netto"))||0;
+  var b = parseFloat(gv("of-brutto"))||0;
+  var el = document.getElementById("of-markup");
+  if (el) el.value = b - n;
 }
 
 function updatePayStatus(id, status) {
