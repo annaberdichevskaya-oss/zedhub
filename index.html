@@ -170,7 +170,7 @@ var REQ_STATUS_MAP = {
 };
 
 var CARGO_STATUSES = ["Очікує завантаження","Завантажено","В дорозі","Прибув","Розвантажено","TBD"];
-var CUSTOMS_STATUSES = ["Очікує документи","Документи подані","На митниці","Митний огляд","Розмитнено","Затримано","TBD"];
+var CUSTOMS_STATUSES = ["TBD","Док подані","Скан","Фіз огляд","Розмитнено"];
 var DELIVERY_STATUSES = ["Очікує","Транспорт призначено","Завантажено","В дорозі","Доставлено","Потребує уточнення","TBD"];
 var PAYMENT_STATUSES = ["Очікує від фін відділу","Виставлено","Оплачено","Прострочено","TBD"];
 var BOOKING_STATUSES = ["Очікує букінг","Отримано","Підтверджено"];
@@ -184,7 +184,7 @@ function statusPill(status, map) {
 
 function reqPill(s) { return statusPill(s, REQ_STATUS_MAP); }
 function custPill(s) {
-  var m = {"Очікує документи":"p-calc","Документи подані":"p-book","На митниці":"p-wait","Митний огляд":"p-wait","Розмитнено":"p-clear","Затримано":"p-reject"};
+  var m = {"TBD":"p-reject","Док подані":"p-book","Скан":"p-wait","Фіз огляд":"p-wait","Розмитнено":"p-clear"};
   return statusPill(s, m);
 }
 function payCls(s) {
@@ -389,7 +389,9 @@ var reqSort = "new";
 var reqFilter = "";
 var ordSearch = "";
 var ordSort = "new";
-var ordManagerFilter = "";
+var ordManagerSel = [];
+var ordLogistSel = [];
+var ordExecOpen = false;
 var ordCargoFilter = "";
 
 function switchTab(tab) {
@@ -521,10 +523,26 @@ function renderOrders() {
   var selCount = Object.keys(_selectedOrders).length;
   html += "<div class='toolbar'>"
     + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + ordSearch + "' oninput='ordSearch=this.value;renderOrders()'>"
-    + "<select class='filter-sel' onchange='ordManagerFilter=this.value;renderOrders()'>"
-    + "<option value=''>👤 Всі менеджери</option>"
-    + MANAGERS.filter(function(m){return m!=="—";}).map(function(m){return "<option value='" + m + "'" + (ordManagerFilter===m?" selected":"") + ">" + m + "</option>";}).join("")
-    + "</select>"
+    + (function(){
+        var cnt = ordManagerSel.length + ordLogistSel.length;
+        var btn = "<div style='position:relative;display:inline-block'>"
+          + "<button class='btn btn-gray' onclick='ordExecOpen=!ordExecOpen;renderOrders()'>👥 Виконавці" + (cnt>0 ? " (" + cnt + ")" : "") + " ▾</button>";
+        if (ordExecOpen) {
+          btn += "<div style='position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px;z-index:50;min-width:180px'>"
+            + "<div style='font-size:10px;font-weight:700;color:#6b7280;margin-bottom:5px'>МЕНЕДЖЕРИ</div>"
+            + MANAGERS.filter(function(m){return m!=="—";}).map(function(m){
+                return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordManagerSel.indexOf(m)>=0?"checked":"") + " onchange='toggleExecFilter(\"m\",\"" + m + "\")'>" + m + "</label>";
+              }).join("")
+            + "<div style='font-size:10px;font-weight:700;color:#6b7280;margin:8px 0 5px'>ЛОГІСТИ</div>"
+            + LOGISTS.filter(function(l){return l!=="—";}).map(function(l){
+                return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordLogistSel.indexOf(l)>=0?"checked":"") + " onchange='toggleExecFilter(\"l\",\"" + l + "\")'>" + l + "</label>";
+              }).join("")
+            + (cnt>0 ? "<button class='btn btn-gray' style='width:100%;margin-top:8px;font-size:11px' onclick='ordManagerSel=[];ordLogistSel=[];renderOrders()'>Скинути</button>" : "")
+            + "</div>";
+        }
+        btn += "</div>";
+        return btn;
+      })()
     + "<select class='filter-sel' onchange='ordCargoFilter=this.value;renderOrders()'>"
     + "<option value=''>📦 Всі статуси вантажу</option>"
     + CARGO_STATUSES.map(function(s){return "<option value='" + s + "'" + (ordCargoFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
@@ -724,7 +742,7 @@ function createOrder(reqId) {
     incoterms: "", booking: "", carrier: "", container: "",
     cutoff: "", route_full: r.route, etd: "", eta: "",
     bol: "", cargo_status: "Очікує завантаження", decl: "",
-    customs_status: "Очікує документи", customs_date: "",
+    customs_status: "TBD", customs_date: "",
     resort: "Не потрібна", resort_addr: "", resort_comment: "",
     logist_ua: "", transport_ua: "", delivery_status: "Очікує", delivery_date: "",
     invoice_sum: (r.sum_log||0)+(r.sum_brok||0), payment_status: "Очікує від фін відділу", payment_date: "",
@@ -779,7 +797,7 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Митне оформлення</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>СТАТУС МИТНИЦІ</label>" + sel("of-cust", CUSTOMS_STATUSES, isEdit ? o.customs_status : "Очікує документи") + "</div>"
+    + "<div class='field'><label>СТАТУС МИТНИЦІ</label>" + sel("of-cust", CUSTOMS_STATUSES, isEdit ? o.customs_status : "TBD") + "</div>"
     + "<div class='field'><label>ДАТА РОЗМИТНЕННЯ</label>" + dateInput("of-custdate", isEdit ? (o.customs_date||"") : "") + "</div>"
     + "</div>"
 
@@ -869,6 +887,14 @@ function updateOrdManager(id, val) {
 function updateOrdLogist(id, val) {
   var o = db.orders.find(function(x){return x.id===id;});
   if (o) { o.logist = val; save(); }
+}
+
+function toggleExecFilter(type, name) {
+  var arr = type === "m" ? ordManagerSel : ordLogistSel;
+  var i = arr.indexOf(name);
+  if (i >= 0) arr.splice(i, 1);
+  else arr.push(name);
+  renderOrders();
 }
 
 function toggleOrderSelect(id, checked) {
@@ -1240,7 +1266,7 @@ function handleRejestrXlsx(file) {
           return v;
         };
         var incoRaw = getVal(5);
-        var o = { id: ordId++, order_id: "ЗЕД-" + orderNum, client: clientName, route: (incoRaw.split(" ").slice(1).join(" ")||"Китай") + " → Україна", req_id: orderNum, date: getVal(4), incoterms: incoRaw.split(" ")[0]||"", booking: "", carrier: getVal(3), container: getVal(26)||"", cutoff: getVal(6), route_full: "", etd: getVal(8), eta: getVal(10), bol: "", cargo_status: "Очікує завантаження", decl: "", customs_status: "Очікує документи", customs_date: "", resort: "Не потрібна", resort_addr: "", resort_comment: "", logist_ua: getVal(2), transport_ua: "", delivery_status: "Очікує", delivery_date: getVal(13), invoice_sum: parseFloat((getVal(15)||"").replace(/[^0-9.]/g,""))||0, payment_status: "Очікує від фін відділу", payment_date: "", docs: "", notes: getVal(16)+" кор / "+getVal(17)+" кг / "+getVal(18)+" CBM" };
+        var o = { id: ordId++, order_id: "ЗЕД-" + orderNum, client: clientName, route: (incoRaw.split(" ").slice(1).join(" ")||"Китай") + " → Україна", req_id: orderNum, date: getVal(4), incoterms: incoRaw.split(" ")[0]||"", booking: "", carrier: getVal(3), container: getVal(26)||"", cutoff: getVal(6), route_full: "", etd: getVal(8), eta: getVal(10), bol: "", cargo_status: "Очікує завантаження", decl: "", customs_status: "TBD", customs_date: "", resort: "Не потрібна", resort_addr: "", resort_comment: "", logist_ua: getVal(2), transport_ua: "", delivery_status: "Очікує", delivery_date: getVal(13), invoice_sum: parseFloat((getVal(15)||"").replace(/[^0-9.]/g,""))||0, payment_status: "Очікує від фін відділу", payment_date: "", docs: "", notes: getVal(16)+" кор / "+getVal(17)+" кг / "+getVal(18)+" CBM" };
         db.orders.push(o); imported++;
       }
       save(); render();
