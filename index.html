@@ -163,6 +163,7 @@ var INCOTERMS = ["EXW","FCA","FAS","FOB","CPT","CIP","CFR","CIF","DAP","DPU","DD
 var REQ_STATUSES = ["Новий запит","Прораховується","На погодженні","Accepted","Rejected","Відкладено"];
 var NEW_SUBSTATUSES = ["—","Очікую ставку","На розгляді"];
 var MANAGERS = ["—","Оксана К.","Анна Б.","Анна П.","Тетяна Д."];
+var LOGISTS = ["—","Влад В.","Лера К.","Надя Л.","Ден Б.","Таня П."];
 var REQ_STATUS_MAP = {
   "Новий запит":"p-new","Прораховується":"p-calc","На погодженні":"p-agree",
   "Accepted":"p-accept","Rejected":"p-reject","Відкладено":"p-delay"
@@ -314,6 +315,39 @@ async function initCloud() {
   } catch(e) {}
 }
 
+
+function renumberAll() {
+  if (!confirm("Перенумерувати ВСІ запити (0001, 0002...) та їх ордери (ZED0001...)?\n\nЦе оновить існуючі номери. Продовжити?")) return;
+  // Sort requests by current req_num / id to keep chronological order
+  var sorted = db.requests.slice().sort(function(a,b){
+    return (a.id||0) - (b.id||0);
+  });
+  var counter = 1;
+  var mapping = {}; // old order_id -> new order_id
+  sorted.forEach(function(r){
+    var newNum = String(counter).padStart(4, "0");
+    counter++;
+    var oldOrderId = r.order_id;
+    r.req_num = newNum;
+    // If request had an order_id, update it to ZED+newNum
+    if (oldOrderId && oldOrderId !== "Rejected ❌") {
+      var newOrderId = "ZED" + newNum;
+      mapping[oldOrderId] = newOrderId;
+      r.order_id = newOrderId;
+    }
+  });
+  // Update matching orders
+  db.orders.forEach(function(o){
+    if (mapping[o.order_id]) {
+      o.req_id = mapping[o.order_id].replace("ZED","");
+      o.order_id = mapping[o.order_id];
+    }
+  });
+  save();
+  render();
+  alert("Готово! Перенумеровано " + sorted.length + " запитів.");
+}
+
 function updateCounts() {
   var active = db.requests.filter(function(r){return r.status !== "Rejected";}).length;
   document.getElementById("cnt-req").textContent = db.requests.length;
@@ -351,8 +385,10 @@ function restoreBackup(file) {
 // ── Current tab ──────────────────────────────────────────────────
 var currentTab = "requests";
 var reqSearch = "";
+var reqSort = "new";
 var reqFilter = "";
 var ordSearch = "";
+var ordSort = "new";
 var ordManagerFilter = "";
 var ordCargoFilter = "";
 
@@ -380,6 +416,10 @@ function renderRequests() {
     var matchF = !reqFilter || r.status === reqFilter;
     return matchQ && matchF;
   });
+  filtered.sort(function(a,b){
+    var x = (a.req_num||""), y = (b.req_num||"");
+    return reqSort === "new" ? y.localeCompare(x) : x.localeCompare(y);
+  });
 
   var accepted = db.requests.filter(function(r){return r.status==="Accepted";}).length;
   var inProgress = db.requests.filter(function(r){return r.status==="Прораховується"||r.status==="На погодженні";}).length;
@@ -398,6 +438,7 @@ function renderRequests() {
     + "<option value=''>Всі статуси</option>"
     + REQ_STATUSES.map(function(s){return "<option value='" + s + "'" + (reqFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select>"
+    + "<button class='btn btn-gray' onclick='reqSort=reqSort===\"new\"?\"old\":\"new\";renderRequests()'>" + (reqSort==="new"?"↓ Новіші":"↑ Старіші") + "</button>"
     + "<button class='btn btn-yellow' onclick='openAddRequest()'>+ Новий запит</button>"
     + "</div>";
 
@@ -451,6 +492,10 @@ function renderOrders() {
     var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
     return matchSearch && matchManager && matchCargo;
   });
+  filtered.sort(function(a,b){
+    var x = (a.order_id||""), y = (b.order_id||"");
+    return ordSort === "new" ? y.localeCompare(x, undefined, {numeric:true}) : x.localeCompare(y, undefined, {numeric:true});
+  });
 
   var inTransit = db.orders.filter(function(o){return o.cargo_status==="В дорозі";}).length;
   var atCustoms = db.orders.filter(function(o){return o.customs_status==="На митниці"||o.customs_status==="Митний огляд";}).length;
@@ -475,6 +520,7 @@ function renderOrders() {
     + "<option value=''>📦 Всі статуси вантажу</option>"
     + CARGO_STATUSES.map(function(s){return "<option value='" + s + "'" + (ordCargoFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select>"
+    + "<button class='btn btn-gray' onclick='ordSort=ordSort===\"new\"?\"old\":\"new\";renderOrders()'>" + (ordSort==="new"?"↓ Новіші":"↑ Старіші") + "</button>"
     + (selCount > 0 ? "<button class='btn' style='background:#ef4444;color:#fff;border-color:#ef4444' onclick='deleteSelectedOrders()'>🗑 Видалити вибрані (" + selCount + ")</button>" : "")
     + "<button class='btn btn-yellow' onclick='openAddOrder()'>+ Новий ордер</button>"
     + "</div>";
@@ -491,7 +537,7 @@ function renderOrders() {
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>ІНКОТЕРМС</th><th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
     + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МИТНИЦЯ</th>"
-    + "<th>ДОСТАВКА UA</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th><th class='col-sum'>ІНВОЙС ₴ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ДОСТАВКА UA</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>ІНВОЙС ₴ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
@@ -511,7 +557,10 @@ function renderOrders() {
       + RESORT_STATUSES.map(function(s){ return "<option" + (o.resort===s?" selected":"") + ">" + s + "</option>"; }).join("")
       + "</select>"
       + "</td>"
-      + "<td><select style='font-size:11px;padding:3px 5px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' onchange='updateOrdManager(" + o.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((o.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select></td>"
+      + "<td><div style='display:flex;flex-direction:column;gap:3px'>"
+      + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' title='Менеджер' onchange='updateOrdManager(" + o.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((o.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select>"
+      + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #dbeafe;background:#f0f7ff;cursor:pointer' title='Логіст' onchange='updateOrdLogist(" + o.id + ",this.value)'>" + LOGISTS.map(function(l){return "<option" + ((o.logist||"—")===l?" selected":"") + ">" + l + "</option>";}).join("") + "</select>"
+      + "</div></td>"
       + "<td class='col-sum'>"
       + "<div style='font-weight:600;font-size:12px;margin-bottom:4px'>" + (o.invoice_sum||0).toLocaleString("uk-UA") + " ₴</div>"
       + "<select class='pill-select " + payCls(o.payment_status) + "' onchange='updatePayStatus(" + o.id + ",this.value)'>"
@@ -554,7 +603,7 @@ function showRequestModal(r) {
   var title = isEdit ? "✏️ Редагувати запит" : "➕ Новий запит";
   var today = new Date().toLocaleDateString("uk-UA");
   var num = isEdit ? (r.req_num||"") : genReqNum();
-  var autoOid = isEdit ? (r.order_id||"") : ("ЗЕД-" + num);
+  var autoOid = isEdit ? (r.order_id||"") : ("ZED" + num);
 
   var html = "<div class='modal-bg' id='req-modal'><div class='modal'>"
     + "<div class='modal-title'>" + title + "</div>"
@@ -587,7 +636,7 @@ function showRequestModal(r) {
     + "<div class='field' id='substatus-field' style='display:" + ((isEdit&&r.status==="Новий запит")||(!isEdit)?"block":"none") + "'><label>ПІДСТАТУС</label><select id='rf-substatus'>"
     + NEW_SUBSTATUSES.map(function(s){return "<option" + ((isEdit&&r.sub_status===s)?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select></div>"
-    + "<div class='field'><label>ORDER ID</label><input id='rf-oid' value='" + escQ(autoOid) + "' placeholder='ЗЕД-23-06-01'></div>"
+    + "<div class='field'><label>ORDER ID</label><input id='rf-oid' value='" + escQ(autoOid) + "' placeholder='ZED0001'></div>"
     + "<div class='field'><label>МЕНЕДЖЕР</label><select id='rf-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&r.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
     + "</div>"
     + "<div class='form-grid full'>"
@@ -652,7 +701,7 @@ function createOrder(reqId) {
   var r = db.requests.find(function(x){return x.id===reqId;});
   if (!r) return;
   if (!r.order_id) {
-    r.order_id = "ЗЕД-" + (r.req_num || genReqNum());
+    r.order_id = "ZED" + (r.req_num || genReqNum());
     save();
   }
   var o = {
@@ -743,6 +792,7 @@ function showOrderModal(o) {
     + "<div class='field'><label>ДАТА ОПЛАТИ</label><input id='of-paydate' value='" + escQ(isEdit ? (o.payment_date||"") : "") + "'></div>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ ПО ОРДЕРУ (OneDrive)</label><input id='of-docs' value='" + escQ(isEdit ? (o.docs||"") : "") + "' placeholder='https://...'></div>"
     + "<div class='field'><label>МЕНЕДЖЕР</label><select id='of-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&o.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
+    + "<div class='field'><label>ЛОГІСТ</label><select id='of-logist'>" + LOGISTS.map(function(l){return "<option" + ((isEdit&&o.logist===l)?" selected":"") + ">" + l + "</option>";}).join("") + "</select></div>"
     + "</div>"
     + "<div class='form-grid full'><div class='field'><label>ПРИМІТКИ</label><textarea id='of-notes'>" + (isEdit ? (o.notes||"") : "") + "</textarea></div></div>"
 
@@ -770,7 +820,7 @@ function saveOrder(id) {
     delivery_status: gv("of-deliv"), delivery_date: gv("of-delivdate"),
     invoice_sum: parseFloat(gv("of-inv"))||0,
     payment_status: gv("of-pay"), payment_date: gv("of-paydate"),
-    docs: gv("of-docs"), notes: gv("of-notes"), manager: gv("of-manager")
+    docs: gv("of-docs"), notes: gv("of-notes"), manager: gv("of-manager"), logist: gv("of-logist")
   };
   if (id) {
     var ord = db.orders.find(function(x){return x.id===id;});
@@ -802,6 +852,11 @@ function updateReqManager(id, val) {
 function updateOrdManager(id, val) {
   var o = db.orders.find(function(x){return x.id===id;});
   if (o) { o.manager = val; save(); }
+}
+
+function updateOrdLogist(id, val) {
+  var o = db.orders.find(function(x){return x.id===id;});
+  if (o) { o.logist = val; save(); }
 }
 
 function toggleOrderSelect(id, checked) {
@@ -849,13 +904,12 @@ function nextId(arr) { return arr.reduce(function(m,x){return Math.max(m,x.id||0
 function closeModal() { document.getElementById("modal-area").innerHTML = ""; }
 
 function genReqNum() {
-  var d = new Date();
-  var dd = String(d.getDate()).padStart(2,"0");
-  var mm = String(d.getMonth()+1).padStart(2,"0");
-  var existing = db.requests.filter(function(r){
-    return r.req_num && r.req_num.indexOf(dd+"-"+mm+"-")===0;
-  }).length;
-  return dd+"-"+mm+"-"+String(existing+1).padStart(2,"0");
+  var maxNum = 0;
+  db.requests.forEach(function(r){
+    var n = parseInt(r.req_num, 10);
+    if (!isNaN(n) && n > maxNum) maxNum = n;
+  });
+  return String(maxNum + 1).padStart(4, "0");
 }
 
 
@@ -921,8 +975,8 @@ function normName(s) {
 }
 
 // Email логістів для прорахунку
-var LOGIST_EMAIL = "anna.berdcihevskaya@gmail.com";
-var ZED_SUPPORT_EMAIL = "anna.berdcihevskaya@gmail.com";
+var LOGIST_EMAIL = "internationaltransportation@ekol.com.ua";
+var ZED_SUPPORT_EMAIL = "zed.support@ekol.com.ua";
 
 function sendToLogist(reqId) {
   var r = db.requests.find(function(x){return x.id===reqId;});
