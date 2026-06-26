@@ -526,10 +526,10 @@ function renderOrders() {
     + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + ordSearch + "' oninput='ordSearch=this.value;renderOrders()'>"
     + (function(){
         var cnt = ordManagerSel.length + ordLogistSel.length;
-        var btn = "<div style='position:relative;display:inline-block'>"
+        var btn = "<div style='position:relative;display:inline-block;z-index:300'>"
           + "<button class='btn btn-gray' onclick='ordExecOpen=!ordExecOpen;renderOrders()'>👥 Виконавці" + (cnt>0 ? " (" + cnt + ")" : "") + " ▾</button>";
         if (ordExecOpen) {
-          btn += "<div style='position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px;z-index:50;min-width:180px'>"
+          btn += "<div style='position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px;z-index:300;min-width:200px;max-height:340px;overflow-y:auto'>"
             + "<div style='font-size:10px;font-weight:700;color:#6b7280;margin-bottom:5px'>МЕНЕДЖЕРИ</div>"
             + MANAGERS.filter(function(m){return m!=="—";}).map(function(m,idx){
                 return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordManagerSel.indexOf(m)>=0?"checked":"") + " onchange='toggleExecFilter(&quot;m&quot;," + (idx+1) + ")'>" + m + "</label>";
@@ -538,8 +538,10 @@ function renderOrders() {
             + LOGISTS.filter(function(l){return l!=="—";}).map(function(l,idx){
                 return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordLogistSel.indexOf(l)>=0?"checked":"") + " onchange='toggleExecFilter(&quot;l&quot;," + (idx+1) + ")'>" + l + "</label>";
               }).join("")
-            + (cnt>0 ? "<button class='btn btn-gray' style='width:100%;margin-top:8px;font-size:11px' onclick='ordManagerSel=[];ordLogistSel=[];renderOrders()'>Скинути</button>" : "")
-            + "<button class='btn btn-yellow' style='width:100%;margin-top:6px;font-size:11px' onclick='ordExecOpen=false;renderOrders()'>Застосувати</button>"
+            + "<div style='position:sticky;bottom:0;background:#fff;padding-top:6px'>"
+            + (cnt>0 ? "<button class='btn btn-gray' style='width:100%;margin-bottom:6px;font-size:11px' onclick='ordManagerSel=[];ordLogistSel=[];renderOrders()'>Скинути</button>" : "")
+            + "<button class='btn btn-yellow' style='width:100%;font-size:11px' onclick='ordExecOpen=false;renderOrders()'>Застосувати</button>"
+            + "</div>"
             + "</div>";
         }
         btn += "</div>";
