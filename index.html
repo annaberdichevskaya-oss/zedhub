@@ -539,6 +539,7 @@ function renderOrders() {
                 return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordLogistSel.indexOf(l)>=0?"checked":"") + " onchange='toggleExecFilter(&quot;l&quot;," + (idx+1) + ")'>" + l + "</label>";
               }).join("")
             + (cnt>0 ? "<button class='btn btn-gray' style='width:100%;margin-top:8px;font-size:11px' onclick='ordManagerSel=[];ordLogistSel=[];renderOrders()'>Скинути</button>" : "")
+            + "<button class='btn btn-yellow' style='width:100%;margin-top:6px;font-size:11px' onclick='ordExecOpen=false;renderOrders()'>Застосувати</button>"
             + "</div>";
         }
         btn += "</div>";
