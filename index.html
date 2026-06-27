@@ -164,7 +164,6 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
 var INCOTERMS = ["EXW","FCA","FAS","FOB","CPT","CIP","CFR","CIF","DAP","DPU","DDP"];
 
 var REQ_STATUSES = ["Новий запит","Прораховується","На погодженні","Accepted","Rejected"];
-var NEW_SUBSTATUSES = ["—","Очікую ставку","На розгляді"];
 var MANAGERS = ["—","Оксана К.","Анна Б.","Анна П.","Тетяна Д."];
 var LOGISTS = ["—","Влад В.","Лера К.","Надя Л.","Ден Б.","Таня П."];
 var REQ_STATUS_MAP = {
@@ -466,8 +465,8 @@ function renderRequests() {
       + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + r.client + "</div><div style='font-size:10px;color:#9ca3af'>" + (r.contact||"") + "</div></td>"
       + "<td class='col-route'><div style='font-size:12px'>" + r.route + "</div><div style='font-size:10px'><span class='tag'>" + (r.type||"") + "</span></div></td>"
       + "<td><div style='font-size:12px'>" + (r.cargo||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + (r.weight||"") + "</div></td>"
-      + "<td class='col-sum' style='font-weight:600;font-size:12px;color:#16a34a'>$ " + (r.markup||0).toLocaleString("uk-UA") + "</td>"
-      + "<td class='col-status'>" + reqPill(r.status) + (r.status==="Новий запит" && r.sub_status && r.sub_status!=="—" ? "<div style='font-size:10px;color:#6b7280;margin-top:3px'>" + r.sub_status + "</div>" : "") + "</td>"
+      + "<td class='col-sum' style='font-weight:600;font-size:12px;color:#16a34a'>$ " + ((r.sum_brutto||0)-(r.sum_netto||0)).toLocaleString("uk-UA") + "</td>"
+      + "<td class='col-status'>" + reqPill(r.status) + "</td>"
       + "<td><select style='font-size:11px;padding:3px 5px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' onchange='updateReqManager(" + r.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((r.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select></td>"
       + "<td style='white-space:nowrap'>"
       + "<button class='act-btn' onclick='openEditRequest(" + r.id + ")'>✏️</button> "
@@ -654,15 +653,14 @@ function showRequestModal(r) {
     + "</div>"
     + "<div class='section-title'>Прорахунок</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>НАЦІНКА $ (прибуток ЗЕД)</label><input type='number' id='rf-markup' value='" + (isEdit ? (r.markup||0) : "") + "'></div>"
+    + "<div class='field'><label>СУМА НЕТТО $ (собівартість)</label><input type='number' id='rf-netto' value='" + (isEdit ? (r.sum_netto||0) : "") + "' oninput='calcReqMarkup()'></div>"
+    + "<div class='field'><label>СУМА БРУТТО $ (клієнту)</label><input type='number' id='rf-brutto' value='" + (isEdit ? (r.sum_brutto||0) : "") + "' oninput='calcReqMarkup()'></div>"
+    + "<div class='field'><label>НАЦІНКА $ (авто)</label><input type='number' id='rf-markup' value='" + (isEdit ? ((r.sum_brutto||0)-(r.sum_netto||0)) : "") + "' readonly style='background:#f0fdf4;font-weight:700;color:#16a34a'></div>"
     + "</div>"
     + "<div class='section-title'>Рішення</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>СТАТУС</label><select id='rf-status' onchange='toggleSubStatus()'>"
+    + "<div class='field'><label>СТАТУС</label><select id='rf-status'>"
     + REQ_STATUSES.map(function(s){return "<option" + ((isEdit&&r.status===s)?" selected":"") + ">" + s + "</option>";}).join("")
-    + "</select></div>"
-    + "<div class='field' id='substatus-field' style='display:" + ((isEdit&&r.status==="Новий запит")||(!isEdit)?"block":"none") + "'><label>ПІДСТАТУС</label><select id='rf-substatus'>"
-    + NEW_SUBSTATUSES.map(function(s){return "<option" + ((isEdit&&r.sub_status===s)?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select></div>"
     + "<div class='field'><label>МЕНЕДЖЕР</label><select id='rf-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&r.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
     + "</div>"
@@ -678,12 +676,6 @@ function showRequestModal(r) {
   document.getElementById("modal-area").innerHTML = html;
 }
 
-function toggleSubStatus() {
-  var status = gv("rf-status");
-  var field = document.getElementById("substatus-field");
-  if (field) field.style.display = (status === "Новий запит") ? "block" : "none";
-}
-
 function saveRequest(id) {
   var client = gv("rf-client").trim();
   if (!client) { alert("Введіть клієнта"); return; }
@@ -691,8 +683,8 @@ function saveRequest(id) {
     req_num: gv("rf-num"), client: client,
     contact: gv("rf-contact"), route: gv("rf-route"), type: gv("rf-type"),
     cargo: gv("rf-cargo"), weight: gv("rf-weight"), ready_date: fromISODate(gv("rf-ready")),
-    markup: parseFloat(gv("rf-markup"))||0,
-    status: gv("rf-status"), sub_status: gv("rf-status")==="Новий запит" ? gv("rf-substatus") : "", manager: gv("rf-manager"),
+    sum_netto: parseFloat(gv("rf-netto"))||0, sum_brutto: parseFloat(gv("rf-brutto"))||0, markup: (parseFloat(gv("rf-brutto"))||0)-(parseFloat(gv("rf-netto"))||0),
+    status: gv("rf-status"), manager: gv("rf-manager"),
     docs: gv("rf-docs"), comment: gv("rf-comment")
   };
   if (id) {
@@ -930,6 +922,13 @@ function calcOrdMarkup() {
   var n = parseFloat(gv("of-netto"))||0;
   var b = parseFloat(gv("of-brutto"))||0;
   var el = document.getElementById("of-markup");
+  if (el) el.value = b - n;
+}
+
+function calcReqMarkup() {
+  var n = parseFloat(gv("rf-netto"))||0;
+  var b = parseFloat(gv("rf-brutto"))||0;
+  var el = document.getElementById("rf-markup");
   if (el) el.value = b - n;
 }
 
