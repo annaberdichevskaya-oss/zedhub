@@ -597,7 +597,7 @@ function renderOrders() {
         var btn = "<div style='position:relative;display:inline-block;z-index:120'>"
           + "<button class='btn btn-gray' onclick='ordExecOpen=!ordExecOpen;renderOrders()'>👥 Виконавці" + (cnt>0 ? " (" + cnt + ")" : "") + " ▾</button>";
         if (ordExecOpen) {
-          btn += "<div style='position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px;z-index:150;min-width:200px;max-height:340px;overflow-y:auto'>"
+          btn += "<div style='position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:10px;z-index:150;min-width:200px'>"
             + "<div style='font-size:10px;font-weight:700;color:#6b7280;margin-bottom:5px'>МЕНЕДЖЕРИ</div>"
             + MANAGERS.filter(function(m){return m!=="—";}).map(function(m,idx){
                 return "<label style='display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 0;cursor:pointer'><input type='checkbox' " + (ordManagerSel.indexOf(m)>=0?"checked":"") + " onchange='toggleExecFilter(&quot;m&quot;," + (idx+1) + ")'>" + m + "</label>";
@@ -687,6 +687,7 @@ function renderOrders() {
       + "</td>"
       + "<td style='white-space:nowrap'>"
       + "<button class='act-btn' onclick='openEditOrder(" + o.id + ")'>✏️</button> "
+      + "<button class='act-btn' style='color:#16a34a;border-color:#86efac' title='Створити задачу по цьому ордеру' onclick='addTaskForOrder(" + o.id + ")'>✓</button> "
       + "<button class='act-btn del' onclick='deleteOrder(" + o.id + ")'>✕</button>"
       + "</td></tr>";
   });
@@ -1373,16 +1374,19 @@ function renderTasker() {
 }
 
 function openAddTask() { showTaskModal(null); }
+function addTaskForOrder(orderId) {
+  var o = db.orders.find(function(x){return x.id===orderId;});
+  _editingVersion = null;
+  showTaskModal(null, o ? o.order_id : "");
+}
 function openEditTask(id) {
   var t = db.tasks.find(function(x){return x.id===id;});
   if (t) { _editingVersion = t._v || 0; showTaskModal(t); }
 }
 
-function showTaskModal(t) {
+function showTaskModal(t, prefillOrder) {
   var isEdit = !!t;
-  var orderOpts = "<option value=''>— без прив'язки —</option>" + db.orders.map(function(o){
-    return "<option" + ((isEdit&&t.order_id===o.order_id)?" selected":"") + ">" + o.order_id + "</option>";
-  }).join("");
+  var orderVal = isEdit ? (t.order_id||"") : (prefillOrder||"");
   var peopleOpts = function(sel){ return "<option value=''>—</option>" + ALL_PEOPLE.map(function(p){
     return "<option" + (sel===p?" selected":"") + ">" + p + "</option>";
   }).join(""); };
@@ -1390,7 +1394,7 @@ function showTaskModal(t) {
     + "<div class='modal-title'>" + (isEdit ? "✏️ Редагувати задачу" : "➕ Нова задача") + "</div>"
     + "<div class='form-grid full'><div class='field'><label>ЗАДАЧА *</label><textarea id='tf-text' style='min-height:70px'>" + (isEdit ? (t.text||"") : "") + "</textarea></div></div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ОРДЕР (необов'язково)</label><select id='tf-order'>" + orderOpts + "</select></div>"
+    + "<div class='field'><label>ОРДЕР (необов'язково)</label><input id='tf-order' value='" + escQ(orderVal) + "' placeholder='ZED0001'></div>"
     + "<div class='field'><label>ДЕДЛАЙН</label>" + dateInput("tf-deadline", isEdit ? (t.deadline||"") : "") + "</div>"
     + "<div class='field'><label>ВІД КОГО</label><select id='tf-author'>" + peopleOpts(isEdit ? t.author : "") + "</select></div>"
     + "<div class='field'><label>КОМУ</label><select id='tf-assignee'>" + peopleOpts(isEdit ? t.assignee : "") + "</select></div>"
