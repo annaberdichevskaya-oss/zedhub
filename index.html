@@ -155,6 +155,9 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   <button class="tab-btn" id="tab-cli" onclick="switchTab('clients')">
     👥 Клієнти <span class="tab-count" id="cnt-cli">0</span>
   </button>
+  <button class="tab-btn" id="tab-task" onclick="switchTab('tasker')">
+    ✅ Tasker <span class="tab-count" id="cnt-task">0</span>
+  </button>
   <button class="tab-btn" id="tab-ref" onclick="switchTab('reference')">
     📚 Довідник <span class="tab-count" id="cnt-ref">0</span>
   </button>
@@ -224,7 +227,7 @@ function loadLocal() {
       if (d && d.requests) { if (!d.clients) d.clients = []; return d; }
     }
   } catch(e) {}
-  return {requests: [], orders: [], clients: [], references: []};
+  return {requests: [], orders: [], clients: [], references: [], tasks: []};
 }
 
 async function supaFetch(table) {
@@ -234,8 +237,8 @@ async function supaFetch(table) {
 }
 
 async function cloudLoad() {
-  var results = await Promise.all([ supaFetch("requests"), supaFetch("orders"), supaFetch("clients"), supaFetch("refs") ]);
-  return { requests: results[0], orders: results[1], clients: results[2], references: results[3] };
+  var results = await Promise.all([ supaFetch("requests"), supaFetch("orders"), supaFetch("clients"), supaFetch("refs"), supaFetch("tasks") ]);
+  return { requests: results[0], orders: results[1], clients: results[2], references: results[3], tasks: results[4] };
 }
 
 // Sync queue
@@ -368,7 +371,8 @@ async function liveRefresh() {
     // Порівняти зі знімком — оновлювати тільки якщо реально змінилось
     var snap = JSON.stringify({r:fresh.requests.length, o:fresh.orders.length, c:(fresh.clients||[]).length, ref:(fresh.references||[]).length})
       + ":" + fresh.requests.map(function(x){return x.id+"-"+(x._v||0);}).join(",")
-      + ":" + fresh.orders.map(function(x){return x.id+"-"+(x._v||0);}).join(",");
+      + ":" + fresh.orders.map(function(x){return x.id+"-"+(x._v||0);}).join(",")
+      + ":" + (fresh.tasks||[]).map(function(x){return x.id+"-"+(x._v||0);}).join(",");
     if (snap === _lastSnapshot) return;
     _lastSnapshot = snap;
     db = fresh;
@@ -419,6 +423,11 @@ function updateCounts() {
   if (cliEl) cliEl.textContent = (db.clients||[]).length;
   var refEl = document.getElementById("cnt-ref");
   if (refEl) refEl.textContent = (db.references||[]).length;
+  var taskEl = document.getElementById("cnt-task");
+  if (taskEl) {
+    var openTasks = (db.tasks||[]).filter(function(t){return t.status!=="Виконана";}).length;
+    taskEl.textContent = openTasks;
+  }
 }
 
 function exportBackup() {
@@ -462,6 +471,7 @@ function switchTab(tab) {
   document.getElementById("tab-req").classList.toggle("active", tab === "requests");
   document.getElementById("tab-ord").classList.toggle("active", tab === "orders");
   document.getElementById("tab-cli").classList.toggle("active", tab === "clients");
+  document.getElementById("tab-task").classList.toggle("active", tab === "tasker");
   document.getElementById("tab-ref").classList.toggle("active", tab === "reference");
   render();
 }
@@ -470,6 +480,7 @@ function render() {
   if (currentTab === "requests") renderRequests();
   else if (currentTab === "orders") renderOrders();
   else if (currentTab === "clients") renderClients();
+  else if (currentTab === "tasker") renderTasker();
   else renderReference();
 }
 
@@ -1283,6 +1294,154 @@ function saveRefCloud() {
   (db.references||[]).forEach(function(x){ queueSync("refs", x); });
 }
 
+// ── TASKER ───────────────────────────────────────────────────────
+var TASK_STATUSES = ["Нова","В роботі","Виконана"];
+var taskSearch = "";
+var taskAssigneeFilter = "";
+var ALL_PEOPLE = MANAGERS.filter(function(m){return m!=="—";}).concat(LOGISTS.filter(function(l){return l!=="—";}));
+
+function taskStatusCls(s) {
+  var m = {"Нова":"p-new","В роботі":"p-wait","Виконана":"p-paid"};
+  return m[s] || "p-new";
+}
+
+function renderTasker() {
+  if (!db.tasks) db.tasks = [];
+  var filtered = db.tasks.filter(function(t) {
+    var q = taskSearch.toLowerCase();
+    var matchQ = !q || (t.text||"").toLowerCase().indexOf(q) >= 0 || (t.order_id||"").toLowerCase().indexOf(q) >= 0;
+    var matchA = !taskAssigneeFilter || (t.assignee||"") === taskAssigneeFilter;
+    return matchQ && matchA;
+  });
+  // Sort: open first, then by deadline (soonest), done at bottom
+  filtered.sort(function(a,b){
+    var aDone = a.status==="Виконана" ? 1 : 0, bDone = b.status==="Виконана" ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    var da = parseDateVal(a.deadline), dbb = parseDateVal(b.deadline);
+    if (da===null && dbb===null) return 0;
+    if (da===null) return 1;
+    if (dbb===null) return -1;
+    return da - dbb;
+  });
+
+  var open = db.tasks.filter(function(t){return t.status!=="Виконана";}).length;
+  var inWork = db.tasks.filter(function(t){return t.status==="В роботі";}).length;
+  var done = db.tasks.filter(function(t){return t.status==="Виконана";}).length;
+
+  var html = "<div class='stats-bar stats-3'>"
+    + "<div class='stat-card'><div class='stat-val'>" + open + "</div><div class='stat-label'>ВІДКРИТИХ ЗАДАЧ</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>" + inWork + "</div><div class='stat-label'>В РОБОТІ</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>" + done + "</div><div class='stat-label'>ВИКОНАНО</div></div>"
+    + "</div>";
+
+  html += "<div class='toolbar'>"
+    + "<input class='search-box' placeholder='🔍 Пошук задачі...' value='" + taskSearch + "' oninput='taskSearch=this.value;renderTasker()'>"
+    + "<select class='filter-sel' onchange='taskAssigneeFilter=this.value;renderTasker()'>"
+    + "<option value=''>👤 Всі виконавці</option>"
+    + ALL_PEOPLE.map(function(p){return "<option value='" + p + "'" + (taskAssigneeFilter===p?" selected":"") + ">" + p + "</option>";}).join("")
+    + "</select>"
+    + "<button class='btn btn-yellow' onclick='openAddTask()'>+ Задача</button>"
+    + "</div>";
+
+  if (!filtered.length) {
+    html += "<div style='text-align:center;padding:60px;color:#9ca3af'>✅<br>" + (taskSearch||taskAssigneeFilter ? "Задач не знайдено" : "Додайте першу задачу") + "</div>";
+    document.getElementById("main-content").innerHTML = html;
+    return;
+  }
+
+  html += "<div class='table-wrap'><table><thead><tr>"
+    + "<th>СТАТУС</th><th>ЗАДАЧА</th><th>ОРДЕР</th><th>ВІД КОГО</th><th>КОМУ</th><th>ДЕДЛАЙН</th><th>ДІЇ</th>"
+    + "</tr></thead><tbody>";
+  filtered.forEach(function(t) {
+    var overdue = t.status!=="Виконана" && t.deadline && parseDateVal(t.deadline) && parseDateVal(t.deadline) < Date.now() - 86400000;
+    html += "<tr class='" + (t.status==="Виконана"?"":"") + "'>"
+      + "<td><select class='pill-select " + taskStatusCls(t.status) + "' onchange='updateTaskStatus(" + t.id + ",this.value)'>"
+      + TASK_STATUSES.map(function(s){return "<option" + (t.status===s?" selected":"") + ">" + s + "</option>";}).join("")
+      + "</select></td>"
+      + "<td style='max-width:280px'><div style='font-size:12px;" + (t.status==="Виконана"?"text-decoration:line-through;color:#9ca3af":"") + "'>" + (t.text||"") + "</div></td>"
+      + "<td>" + (t.order_id ? "<span class='order-id'>" + t.order_id + "</span>" : "<span style='color:#d1d5db'>—</span>") + "</td>"
+      + "<td style='font-size:11px;color:#6b7280'>" + (t.author||"—") + "</td>"
+      + "<td style='font-size:11px;font-weight:600'>" + (t.assignee||"—") + "</td>"
+      + "<td style='font-size:11px;" + (overdue?"color:#ef4444;font-weight:700":"color:#6b7280") + "'>" + (fmtDate(t.deadline)||"—") + (overdue?" ⚠️":"") + "</td>"
+      + "<td style='white-space:nowrap'>"
+      + "<button class='act-btn' onclick='openEditTask(" + t.id + ")'>✏️</button> "
+      + "<button class='act-btn del' onclick='deleteTask(" + t.id + ")'>✕</button>"
+      + "</td></tr>";
+  });
+  html += "</tbody></table></div>";
+  document.getElementById("main-content").innerHTML = html;
+}
+
+function openAddTask() { showTaskModal(null); }
+function openEditTask(id) {
+  var t = db.tasks.find(function(x){return x.id===id;});
+  if (t) { _editingVersion = t._v || 0; showTaskModal(t); }
+}
+
+function showTaskModal(t) {
+  var isEdit = !!t;
+  var orderOpts = "<option value=''>— без прив'язки —</option>" + db.orders.map(function(o){
+    return "<option" + ((isEdit&&t.order_id===o.order_id)?" selected":"") + ">" + o.order_id + "</option>";
+  }).join("");
+  var peopleOpts = function(sel){ return "<option value=''>—</option>" + ALL_PEOPLE.map(function(p){
+    return "<option" + (sel===p?" selected":"") + ">" + p + "</option>";
+  }).join(""); };
+  var html = "<div class='modal-bg' id='task-modal'><div class='modal'>"
+    + "<div class='modal-title'>" + (isEdit ? "✏️ Редагувати задачу" : "➕ Нова задача") + "</div>"
+    + "<div class='form-grid full'><div class='field'><label>ЗАДАЧА *</label><textarea id='tf-text' style='min-height:70px'>" + (isEdit ? (t.text||"") : "") + "</textarea></div></div>"
+    + "<div class='form-grid'>"
+    + "<div class='field'><label>ОРДЕР (необов'язково)</label><select id='tf-order'>" + orderOpts + "</select></div>"
+    + "<div class='field'><label>ДЕДЛАЙН</label>" + dateInput("tf-deadline", isEdit ? (t.deadline||"") : "") + "</div>"
+    + "<div class='field'><label>ВІД КОГО</label><select id='tf-author'>" + peopleOpts(isEdit ? t.author : "") + "</select></div>"
+    + "<div class='field'><label>КОМУ</label><select id='tf-assignee'>" + peopleOpts(isEdit ? t.assignee : "") + "</select></div>"
+    + "<div class='field'><label>СТАТУС</label>" + sel("tf-status", TASK_STATUSES, isEdit ? t.status : "Нова") + "</div>"
+    + "</div>"
+    + "<div class='modal-btns'>"
+    + "<button class='btn btn-gray' onclick='closeModal()'>Скасувати</button>"
+    + "<button class='btn btn-yellow' onclick='saveTask(" + (isEdit ? t.id : "null") + ")'>Зберегти</button>"
+    + "</div></div></div>";
+  document.getElementById("modal-area").innerHTML = html;
+}
+
+function saveTask(id) {
+  var text = gv("tf-text").trim();
+  if (!text) { alert("Введіть текст задачі"); return; }
+  var data = {
+    text: text, order_id: gv("tf-order"), deadline: fromISODate(gv("tf-deadline")),
+    author: gv("tf-author"), assignee: gv("tf-assignee"), status: gv("tf-status")
+  };
+  if (!db.tasks) db.tasks = [];
+  if (id) {
+    var t = db.tasks.find(function(x){return x.id===id;});
+    if (t && _editingVersion !== null && (t._v || 0) > _editingVersion) {
+      if (!confirm("⚠️ Цю задачу щойно змінив інший користувач.\n\nЯкщо збережеш — твої зміни перезапишуть його. Продовжити?")) {
+        closeModal(); render(); _editingVersion = null; return;
+      }
+    }
+    Object.assign(t, data);
+    saveOne("tasks", t);
+    _editingVersion = null;
+  } else {
+    data.id = nextId(db.tasks);
+    data.date = new Date().toLocaleDateString("uk-UA");
+    db.tasks.unshift(data);
+    saveOne("tasks", data);
+  }
+  closeModal(); render();
+}
+
+function updateTaskStatus(id, status) {
+  var t = db.tasks.find(function(x){return x.id===id;});
+  if (t) { t.status = status; saveOne("tasks", t); render(); }
+}
+
+function deleteTask(id) {
+  if (!confirm("Видалити задачу?")) return;
+  db.tasks = db.tasks.filter(function(x){return x.id!==id;});
+  supaDelete("tasks", id);
+  save(); render();
+}
+
 function sendOrderMail(orderId) {
   var o = db.orders.find(function(x){return x.id===orderId;});
   if (!o) return;
@@ -1375,7 +1534,7 @@ function handleRejestrXlsx(file) {
 }
 function clearAllData() {
   if (!confirm("Видалити ВСІ дані?")) return;
-  db = {requests: [], orders: [], clients: [], references: []};
+  db = {requests: [], orders: [], clients: [], references: [], tasks: []};
   save(); render();
   alert("Всі дані видалено");
 }
