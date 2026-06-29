@@ -24,6 +24,7 @@ header{background:#1a1a2e;padding:12px 20px;display:flex;align-items:center;just
 .tab-count{background:#f3f4f6;color:#6b7280;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px}
 .tab-count.orange{background:#fef3c7;color:#d97706}
 .content{padding:16px 20px;overflow-x:auto}
+.table-wrap{border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .toolbar{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
 .search-box{flex:1;min-width:180px;border:1px solid #e5e7eb;border-radius:8px;padding:7px 12px;font-size:13px;outline:none;font-family:inherit;background:#fff}
 .search-box:focus{border-color:#f59e0b}
@@ -33,9 +34,9 @@ header{background:#1a1a2e;padding:12px 20px;display:flex;align-items:center;just
 .btn-gray{background:#f3f4f6;color:#374151;border:1px solid #e5e7eb}.btn-gray:hover{background:#e5e7eb}
 .btn-green{background:#16a34a;color:#fff}.btn-green:hover{background:#15803d}
 .btn-red{background:#ef4444;color:#fff}.btn-red:hover{background:#dc2626}
-table{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+table{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:10px}
 thead tr{background:#1a1a2e}
-thead th{position:sticky;top:102px;z-index:70;background:#1a1a2e}
+thead th{position:sticky;top:102px;z-index:70;background:#1a1a2e;will-change:transform}
 table.no-sticky thead th{position:static}
 th{padding:9px 10px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;color:#fff;white-space:nowrap}
 td{padding:8px 10px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
@@ -297,12 +298,16 @@ function getSampleOrders() {
 var db = loadLocal();
 
 function save() {
+  // Local only — швидке збереження без навантаження на хмару
   try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
   updateCounts();
-  // Sync all to cloud in background
-  db.requests.forEach(function(r){ queueSync("requests", r); });
-  db.orders.forEach(function(o){ queueSync("orders", o); });
-  (db.clients||[]).forEach(function(c){ queueSync("clients", c); });
+}
+
+function saveOne(table, record) {
+  // Зберегти локально + синкнути ТІЛЬКИ цю запис у хмару
+  try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
+  updateCounts();
+  if (table && record) queueSync(table, record);
 }
 
 async function initCloud() {
@@ -452,7 +457,7 @@ function renderRequests() {
     return;
   }
 
-  html += "<div><table><thead><tr>"
+  html += "<div class='table-wrap'><table><thead><tr>"
     + "<th>№ ЗАПИТУ</th><th>ДАТА</th><th class='col-client'>КЛІЄНТ</th><th class='col-route'>МАРШРУТ / ТИП</th>"
     + "<th>ВАНТАЖ</th><th class='col-sum'>НАЦІНКА $</th><th class='col-status'>СТАТУС</th>"
     + "<th>МЕНЕДЖЕР</th><th>ДІЇ</th>"
@@ -510,11 +515,11 @@ function renderOrders() {
   var ordersStatVal = execActive
     ? "<span style='color:#f59e0b'>" + filtered.length + "</span><span style='font-size:14px;color:#9ca3af'> / " + db.orders.length + "</span>"
     : String(db.orders.length);
-  var ordersStatLabel = execActive ? "ОРДЕРІВ (ФІЛЬТР)" : "ВСЬОГО ОРДЕРІВ";
+  var ordersStatLabel = execActive ? "ОРДЕРІВ" : "ВСЬОГО ОРДЕРІВ";
 
   var html = "<div class='stats-bar stats-2'>"
     + "<div class='stat-card'><div class='stat-val'>" + ordersStatVal + "</div><div class='stat-label'>" + ordersStatLabel + "</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + totalMarkup.toLocaleString("uk-UA") + "</div><div class='stat-label'>" + (execActive ? "НАЦІНКА (ФІЛЬТР)" : "ЗАГАЛЬНА НАЦІНКА") + "</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + totalMarkup.toLocaleString("uk-UA") + "</div><div class='stat-label'>" + (execActive ? "НАЦІНКА" : "ЗАГАЛЬНА НАЦІНКА") + "</div></div>"
     + "</div>";
 
   var selCount = Object.keys(_selectedOrders).length;
@@ -565,7 +570,7 @@ function renderOrders() {
   }
 
   var allChecked = filtered.length > 0 && filtered.every(function(o){ return _selectedOrders[o.id]; });
-  html += "<div><table><thead><tr>"
+  html += "<div class='table-wrap'><table><thead><tr>"
     + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
@@ -693,20 +698,21 @@ function saveRequest(id) {
     var alreadyHasOrder = db.orders.some(function(o){ return o.order_id === r.order_id; });
     Object.assign(r, data);
     if (data.status === "Accepted" && !wasAccepted && !alreadyHasOrder) {
-      save(); closeModal();
+      saveOne("requests", r); closeModal();
       createOrder(r.id);
       return;
     }
+    saveOne("requests", r); closeModal(); render();
   } else {
     data.id = nextId(db.requests);
     data.date = new Date().toLocaleDateString("uk-UA");
     db.requests.unshift(data);
     if (data.status === "Accepted") {
       var exists = db.orders.some(function(o){ return o.order_id === data.order_id; });
-      if (!exists) { save(); closeModal(); createOrder(data.id); return; }
+      if (!exists) { saveOne("requests", data); closeModal(); createOrder(data.id); return; }
     }
+    saveOne("requests", data); closeModal(); render();
   }
-  save(); closeModal(); render();
 }
 
 function deleteRequest(id) {
@@ -722,7 +728,7 @@ function createOrder(reqId) {
   if (!r) return;
   if (!r.order_id) {
     r.order_id = "ZED" + (r.req_num || genReqNum());
-    save();
+    saveOne("requests", r);
   }
   var o = {
     id: nextId(db.orders),
@@ -738,7 +744,7 @@ function createOrder(reqId) {
     docs: r.docs||"", notes: r.comment||""
   };
   db.orders.unshift(o);
-  save();
+  saveOne("orders", o);
   switchTab("orders");
   alert("Ордер " + r.order_id + " створено!");
 }
@@ -846,11 +852,12 @@ function saveOrder(id) {
   if (id) {
     var ord = db.orders.find(function(x){return x.id===id;});
     Object.assign(ord, data);
+    saveOne("orders", ord); closeModal(); render();
   } else {
     data.id = nextId(db.orders);
     db.orders.unshift(data);
+    saveOne("orders", data); closeModal(); render();
   }
-  save(); closeModal(); render();
 }
 
 function resortCls(s) {
@@ -860,24 +867,24 @@ function resortCls(s) {
 
 function updateResort(id, status) {
   var o = db.orders.find(function(x){return x.id===id;});
-  if (o) { o.resort = status; save(); }
+  if (o) { o.resort = status; saveOne("orders", o); }
 }
 
 var _selectedOrders = {};
 
 function updateReqManager(id, val) {
   var r = db.requests.find(function(x){return x.id===id;});
-  if (r) { r.manager = val; save(); }
+  if (r) { r.manager = val; saveOne("requests", r); }
 }
 
 function updateOrdManager(id, val) {
   var o = db.orders.find(function(x){return x.id===id;});
-  if (o) { o.manager = val; save(); }
+  if (o) { o.manager = val; saveOne("orders", o); }
 }
 
 function updateOrdLogist(id, val) {
   var o = db.orders.find(function(x){return x.id===id;});
-  if (o) { o.logist = val; save(); }
+  if (o) { o.logist = val; saveOne("orders", o); }
 }
 
 function toggleExecFilter(type, idx) {
@@ -934,7 +941,7 @@ function calcReqMarkup() {
 
 function updatePayStatus(id, status) {
   var o = db.orders.find(function(x){return x.id===id;});
-  if (o) { o.payment_status = status; save(); }
+  if (o) { o.payment_status = status; saveOne("orders", o); }
 }
 
 function deleteOrder(id) {
@@ -1029,7 +1036,7 @@ function renderClients() {
     document.getElementById("main-content").innerHTML = html;
     return;
   }
-  html += "<div><table class='no-sticky'><thead><tr>"
+  html += "<div class='table-wrap'><table class='no-sticky'><thead><tr>"
     + "<th>КЛІЄНТ</th><th>КОНТАКТ</th><th>ТЕЛЕФОН</th><th>EMAIL</th><th>ТЕГИ</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
   filtered.forEach(function(c) {
@@ -1067,9 +1074,9 @@ function saveClient(id) {
   var tags = tagsRaw ? tagsRaw.split(",").map(function(t){return t.trim();}).filter(Boolean) : [];
   var data = { name: name, contact: gv("cf-contact"), phone: gv("cf-phone"), emails: emails, tags: tags, notes: gv("cf-notes") };
   if (!db.clients) db.clients = [];
-  if (id) { var cli = db.clients.find(function(x){return x.id===id;}); Object.assign(cli, data); }
-  else { data.id = nextId(db.clients); db.clients.unshift(data); }
-  save(); closeModal(); render();
+  if (id) { var cli = db.clients.find(function(x){return x.id===id;}); Object.assign(cli, data); saveOne("clients", cli); }
+  else { data.id = nextId(db.clients); db.clients.unshift(data); saveOne("clients", data); }
+  closeModal(); render();
 }
 function deleteClient(id) { if (!confirm("Видалити клієнта?")) return; db.clients = db.clients.filter(function(x){return x.id!==id;}); supaDelete("clients", id); save(); render(); }
 function normName(s) {
@@ -1107,7 +1114,7 @@ function sendToLogist(reqId) {
   // Optionally bump status
   if (r.status === "Новий запит") {
     r.status = "Прораховується";
-    save(); render();
+    saveOne("requests", r); render();
   }
 }
 
@@ -1179,11 +1186,13 @@ function saveRef(id) {
   if (id) {
     var x = db.references.find(function(r){return r.id===id;});
     Object.assign(x, data);
+    saveOne("refs", x);
   } else {
     data.id = nextId(db.references);
     db.references.unshift(data);
+    saveOne("refs", data);
   }
-  saveRefCloud(); closeModal(); render();
+  closeModal(); render();
 }
 
 function deleteRef(id) {
@@ -1242,7 +1251,9 @@ function handleExcel(file) {
         });
       }
       db.requests = imported.concat(db.requests);
-      save(); render();
+      save();
+      imported.forEach(function(r){ queueSync("requests", r); });
+      render();
       alert("Імпортовано: " + imported.length + " запитів");
     } catch(err) { alert("Помилка: " + err.message); }
   };
@@ -1278,7 +1289,10 @@ function handleRejestrXlsx(file) {
         var o = { id: ordId++, order_id: "ZED" + orderNum, client: clientName, route: (incoRaw.split(" ").slice(1).join(" ")||"Китай") + " → Україна", req_id: orderNum, date: getVal(4), incoterms: incoRaw.split(" ")[0]||"", booking: "", carrier: getVal(3), container: getVal(26)||"", cutoff: getVal(6), route_full: "", etd: getVal(8), eta: getVal(10), bol: "", cargo_status: "Очікує завантаження", decl: "", customs_status: "TBD", customs_date: "", resort: "Не потрібна", resort_addr: "", resort_comment: "", logist_ua: getVal(2), transport_ua: "", delivery_status: "Очікує", delivery_date: getVal(13), invoice_sum: parseFloat((getVal(15)||"").replace(/[^0-9.]/g,""))||0, payment_status: "Очікує від фін відділу", payment_date: "", docs: "", notes: getVal(16)+" кор / "+getVal(17)+" кг / "+getVal(18)+" CBM" };
         db.orders.push(o); imported++;
       }
-      save(); render();
+      save();
+      db.orders.forEach(function(o){ queueSync("orders", o); });
+      (db.clients||[]).forEach(function(c){ queueSync("clients", c); });
+      render();
       alert("Імпортовано: " + imported + " ордерів. Пропущено: " + skipped);
     } catch(err) { alert("Помилка: " + err.message); }
   };
