@@ -129,6 +129,10 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
     </div>
   </div>
   <div class="hbtns">
+    <span id="sync-indicator" title="Стан синхронізації" style="display:flex;align-items:center;gap:5px;font-size:11px;color:#16a34a;padding:0 8px">
+      <span id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span>
+      <span id="sync-text">Синхронізовано</span>
+    </span>
     <button class="hbtn" onclick="importExcel()">📥 Імпорт Excel</button>
     <input type="file" id="excel-inp" accept=".xlsx,.xls" style="display:none" onchange="handleExcel(this.files[0])">
     <button class="hbtn" onclick="importRejestrXlsx()">📥 Реєстр Excel</button>
@@ -244,18 +248,37 @@ function queueSync(table, record) {
   _syncTimer = setTimeout(flushSync, 1000);
 }
 
+function setSyncState(state) {
+  // state: "ok" | "syncing" | "error"
+  var dot = document.getElementById("sync-dot");
+  var txt = document.getElementById("sync-text");
+  var wrap = document.getElementById("sync-indicator");
+  if (!dot || !txt || !wrap) return;
+  if (state === "syncing") {
+    dot.style.background = "#f59e0b"; wrap.style.color = "#f59e0b"; txt.textContent = "Синхронізація…";
+  } else if (state === "error") {
+    dot.style.background = "#ef4444"; wrap.style.color = "#ef4444"; txt.textContent = "Не збережено в хмару";
+  } else {
+    dot.style.background = "#16a34a"; wrap.style.color = "#16a34a"; txt.textContent = "Синхронізовано";
+  }
+}
+
 async function flushSync() {
   var queue = _syncQueue.slice();
   _syncQueue = [];
+  setSyncState("syncing");
+  var hadError = false;
   for (var i = 0; i < queue.length; i++) {
     var item = queue[i];
     try {
-      await fetch(SUPA_BASE + "/" + item.table, {
+      var res = await fetch(SUPA_BASE + "/" + item.table, {
         method: "POST", headers: supaHeaders(),
         body: JSON.stringify({ id: item.record.id, data: item.record, updated_at: new Date().toISOString() })
       });
-    } catch(e) {}
+      if (!res.ok) { hadError = true; }
+    } catch(e) { hadError = true; }
   }
+  setSyncState(hadError ? "error" : "ok");
 }
 
 async function supaDelete(table, id) {
@@ -305,6 +328,7 @@ function save() {
 
 function saveOne(table, record) {
   // Зберегти локально + синкнути ТІЛЬКИ цю запис у хмару
+  if (record) record._v = (record._v || 0) + 1;  // інкремент версії
   try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
   updateCounts();
   if (table && record) queueSync(table, record);
@@ -319,6 +343,38 @@ async function initCloud() {
       render();
       updateCounts();
     }
+  } catch(e) {}
+  // Запустити живе оновлення раз на 10 сек
+  startLiveRefresh();
+}
+
+var _liveTimer = null;
+var _lastSnapshot = "";
+
+function startLiveRefresh() {
+  if (_liveTimer) clearInterval(_liveTimer);
+  _liveTimer = setInterval(liveRefresh, 10000);
+}
+
+async function liveRefresh() {
+  // Не оновлювати поки відкрита форма редагування — щоб не збити введення
+  var modalArea = document.getElementById("modal-area");
+  if (modalArea && modalArea.innerHTML.trim() !== "") return;
+  // Не оновлювати поки є незавершена синхронізація (щоб не перетерти свіже)
+  if (_syncQueue.length > 0) return;
+  try {
+    var fresh = await cloudLoad();
+    if (!fresh) return;
+    // Порівняти зі знімком — оновлювати тільки якщо реально змінилось
+    var snap = JSON.stringify({r:fresh.requests.length, o:fresh.orders.length, c:(fresh.clients||[]).length, ref:(fresh.references||[]).length})
+      + ":" + fresh.requests.map(function(x){return x.id+"-"+(x._v||0);}).join(",")
+      + ":" + fresh.orders.map(function(x){return x.id+"-"+(x._v||0);}).join(",");
+    if (snap === _lastSnapshot) return;
+    _lastSnapshot = snap;
+    db = fresh;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(db)); } catch(e) {}
+    render();
+    updateCounts();
   } catch(e) {}
 }
 
@@ -574,8 +630,8 @@ function renderOrders() {
     + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
-    + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МИТНИЦЯ</th>"
-    + "<th>ДОСТАВКА UA</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>ПЕРЕТАРКА</th>"
+    + "<th>МИТНИЦЯ</th><th>ДОСТАВКА UA</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
@@ -587,13 +643,13 @@ function renderOrders() {
       + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + (fmtDate(o.cutoff)||"—") + "</td>"
       + "<td><div style='font-size:11px'>" + (fmtDate(o.etd)||"—") + "</div><div style='font-size:11px;color:#16a34a'>" + fmtDate(o.eta||"") + "</div></td>"
       + "<td>" + statusPill(o.cargo_status, {"Очікує завантаження":"p-calc","Завантажено":"p-new","В дорозі":"p-book","Прибув":"p-wait","Розвантажено":"p-clear","TBD":"p-reject"}) + "</td>"
-      + "<td>" + custPill(o.customs_status) + "</td>"
-      + "<td>" + delivPill(o.delivery_status) + "</td>"
       + "<td>"
       + "<select class='pill-select " + resortCls(o.resort) + "' onchange='updateResort(" + o.id + ",this.value)'>"
       + RESORT_STATUSES.map(function(s){ return "<option" + (o.resort===s?" selected":"") + ">" + s + "</option>"; }).join("")
       + "</select>"
       + "</td>"
+      + "<td>" + custPill(o.customs_status) + "</td>"
+      + "<td>" + delivPill(o.delivery_status) + "</td>"
       + "<td><div style='display:flex;flex-direction:column;gap:3px'>"
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' title='Менеджер' onchange='updateOrdManager(" + o.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((o.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select>"
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #dbeafe;background:#f0f7ff;cursor:pointer' title='Логіст' onchange='updateOrdLogist(" + o.id + ",this.value)'>" + LOGISTS.map(function(l){return "<option" + ((o.logist||"—")===l?" selected":"") + ">" + l + "</option>";}).join("") + "</select>"
@@ -632,7 +688,7 @@ function renderOrders() {
 function openAddRequest() { showRequestModal(null); }
 function openEditRequest(id) {
   var r = db.requests.find(function(x){return x.id===id;});
-  if (r) showRequestModal(r);
+  if (r) { _editingVersion = r._v || 0; showRequestModal(r); }
 }
 
 function showRequestModal(r) {
@@ -694,15 +750,24 @@ function saveRequest(id) {
   };
   if (id) {
     var r = db.requests.find(function(x){return x.id===id;});
+    // Перевірка конфлікту
+    if (r && _editingVersion !== null && (r._v || 0) > _editingVersion) {
+      if (!confirm("⚠️ Цей запит щойно змінив інший користувач.\n\nЯкщо збережеш — твої зміни перезапишуть його. Продовжити?")) {
+        closeModal(); render(); _editingVersion = null;
+        return;
+      }
+    }
     var wasAccepted = r.status === "Accepted";
     var alreadyHasOrder = db.orders.some(function(o){ return o.order_id === r.order_id; });
     Object.assign(r, data);
     if (data.status === "Accepted" && !wasAccepted && !alreadyHasOrder) {
       saveOne("requests", r); closeModal();
       createOrder(r.id);
+      _editingVersion = null;
       return;
     }
     saveOne("requests", r); closeModal(); render();
+    _editingVersion = null;
   } else {
     data.id = nextId(db.requests);
     data.date = new Date().toLocaleDateString("uk-UA");
@@ -751,9 +816,11 @@ function createOrder(reqId) {
 
 // ── Add/Edit Order ───────────────────────────────────────────────
 function openAddOrder() { showOrderModal(null); }
+var _editingVersion = null;
+
 function openEditOrder(id) {
   var o = db.orders.find(function(x){return x.id===id;});
-  if (o) showOrderModal(o);
+  if (o) { _editingVersion = o._v || 0; showOrderModal(o); }
 }
 
 function sel(id, arr, val) {
@@ -796,9 +863,9 @@ function showOrderModal(o) {
     + "<div class='field'><label>ДАТА РОЗМИТНЕННЯ</label>" + dateInput("of-custdate", isEdit ? (o.customs_date||"") : "") + "</div>"
     + "</div>"
 
-    + "<div class='section-title'>Пересортування</div>"
+    + "<div class='section-title'>Перетарка</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ПЕРЕСОРТУВАННЯ</label>" + sel("of-resort", RESORT_STATUSES, isEdit ? o.resort : "Не потрібна") + "</div>"
+    + "<div class='field'><label>ПЕРЕТАРКА</label>" + sel("of-resort", RESORT_STATUSES, isEdit ? o.resort : "Не потрібна") + "</div>"
     + "<div class='field'><label>СКЛАД / АДРЕСА</label><input id='of-resaddr' value='" + escQ(isEdit ? (o.resort_addr||"") : "") + "'></div>"
     + "</div>"
 
@@ -851,8 +918,16 @@ function saveOrder(id) {
   };
   if (id) {
     var ord = db.orders.find(function(x){return x.id===id;});
+    // Перевірка конфлікту: чи хтось змінив запис поки ти редагувала
+    if (ord && _editingVersion !== null && (ord._v || 0) > _editingVersion) {
+      if (!confirm("⚠️ Цей ордер щойно змінив інший користувач.\n\nЯкщо збережеш — твої зміни перезапишуть його. Продовжити?")) {
+        closeModal(); render(); _editingVersion = null;
+        return;
+      }
+    }
     Object.assign(ord, data);
     saveOne("orders", ord); closeModal(); render();
+    _editingVersion = null;
   } else {
     data.id = nextId(db.orders);
     db.orders.unshift(data);
