@@ -819,7 +819,7 @@ function createOrder(reqId) {
     customs_status: "TBD", customs_date: "",
     resort: "Не потрібна", resort_addr: "", resort_comment: "",
     logist_ua: "", transport_ua: "", delivery_status: "Очікує", delivery_date: "",
-    invoice_sum: 0, sum_netto: 0, sum_brutto: 0, payment_status: "Очікує від фін відділу", payment_date: "",
+    invoice_sum: (r.sum_brutto||0)-(r.sum_netto||0), sum_netto: r.sum_netto||0, sum_brutto: r.sum_brutto||0, payment_status: "Очікує від фін відділу", payment_date: "",
     docs: r.docs||"", notes: r.comment||""
   };
   db.orders.unshift(o);
@@ -835,6 +835,13 @@ var _editingVersion = null;
 function openEditOrder(id) {
   var o = db.orders.find(function(x){return x.id===id;});
   if (o) { _editingVersion = o._v || 0; showOrderModal(o); }
+}
+
+function openOrderFromTask(orderId) {
+  var o = (db.orders||[]).find(function(x){ return x.order_id === orderId; });
+  if (!o) { alert("Ордер " + orderId + " не знайдено"); return; }
+  _editingVersion = o._v || 0;
+  showOrderModal(o);
 }
 
 function sel(id, arr, val) {
@@ -1374,7 +1381,7 @@ function renderTasker() {
       + TASK_STATUSES.map(function(s){return "<option" + (t.status===s?" selected":"") + ">" + s + "</option>";}).join("")
       + "</select></td>"
       + "<td style='max-width:280px'><div style='font-size:12px;" + (t.status==="Виконана"?"text-decoration:line-through;color:#9ca3af":"") + "'>" + (t.text||"") + "</div></td>"
-      + "<td>" + (t.order_id ? "<span class='order-id'>" + t.order_id + "</span>" : "<span style='color:#d1d5db'>—</span>") + "</td>"
+      + "<td>" + (t.order_id ? "<span class='order-id' style='cursor:pointer;text-decoration:underline' title='Відкрити ордер' onclick='openOrderFromTask(\"" + escQ(t.order_id) + "\")'>" + t.order_id + "</span>" : "<span style='color:#d1d5db'>—</span>") + "</td>"
       + "<td style='font-size:11px;color:#6b7280'>" + (t.author||"—") + "</td>"
       + "<td style='font-size:11px;font-weight:600'>" + (t.assignee||"—") + "</td>"
       + "<td style='font-size:11px;" + (overdue?"color:#ef4444;font-weight:700":"color:#6b7280") + "'>" + (fmtDate(t.deadline)||"—") + (overdue?" ⚠️":"") + "</td>"
