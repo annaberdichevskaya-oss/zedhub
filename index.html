@@ -803,8 +803,10 @@ function deleteRequest(id) {
 function createOrder(reqId) {
   var r = db.requests.find(function(x){return x.id===reqId;});
   if (!r) return;
+  // Ордер отримує власний наскрізний номер (ZED + наступний по порядку),
+  // незалежно від № запиту. Запит зберігає свій номер.
   if (!r.order_id) {
-    r.order_id = "ZED" + (r.req_num || genReqNum());
+    r.order_id = genOrderId();
     saveOne("requests", r);
   }
   var o = {
@@ -848,7 +850,7 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Ордер</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : genOrderNum()) + "'></div>"
+    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : genOrderId()) + "'></div>"
     + "<div class='field'><label>ДАТА ОРДЕРУ</label>" + dateInput("of-date", isEdit ? (o.date||"") : new Date().toLocaleDateString("uk-UA")) + "</div>"
     + "<div class='field'><label>КЛІЄНТ</label><select id='of-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&o.client===c.name)?" selected":"") + ">" + c.name + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
@@ -857,7 +859,7 @@ function showOrderModal(o) {
     + "<div class='section-title'>Букінг та перевезення</div>"
     + "<div class='form-grid'>"
     + "<div class='field'><label>ПІДТВЕРДЖЕНИЙ БУКІНГ</label><input id='of-book' value='" + escQ(isEdit ? (o.booking||"") : "") + "'></div>"
-    + "<div class='field'><label>ПЕРЕВІЗНИК</label><input id='of-carr' value='" + escQ(isEdit ? (o.carrier||"") : "") + "'></div>"
+    + "<div class='field'><label>ПЕРЕВІЗНИК / ШИППЕР</label><input id='of-carr' value='" + escQ(isEdit ? (o.carrier||"") : "") + "'></div>"
     + "<div class='field'><label>КОНТЕЙНЕР №</label><input id='of-cont' value='" + escQ(isEdit ? (o.container||"") : "") + "'></div>"
     + "<div class='field'><label>CUT-OFF</label>" + dateInput("of-cut", isEdit ? (o.cutoff||"") : "") + "</div>"
     + "<div class='field'><label>МАРШРУТ відпр → приб</label><input id='of-rfull' value='" + escQ(isEdit ? (o.route_full||"") : "") + "'></div>"
@@ -1099,6 +1101,7 @@ function parseDateVal(s) {
 }
 
 function genReqNum() {
+  // Номер запиту — власний лічильник запитів (незалежний від ордерів)
   var maxNum = 0;
   db.requests.forEach(function(r){
     var n = parseInt(r.req_num, 10);
@@ -1107,15 +1110,14 @@ function genReqNum() {
   return String(maxNum + 1).padStart(4, "0");
 }
 
-function genOrderNum() {
-  // Наступний номер ZED з урахуванням усіх існуючих ордерів
+function genOrderId() {
+  // Номер ордера — власний наскрізний лічильник (ZED0001, ZED0002…),
+  // завжди наступний після найбільшого існуючого. Довгі реєстрові
+  // номери (ZED + 5+ цифр) не враховуються, щоб не "стрибати".
   var maxNum = 0;
   db.orders.forEach(function(o){
-    var match = String(o.order_id||"").match(/(\d+)\s*$/); // останні цифри в order_id
-    if (match) {
-      var n = parseInt(match[1], 10);
-      if (!isNaN(n) && n > maxNum) maxNum = n;
-    }
+    var m = String(o.order_id||"").match(/^ZED0*(\d{1,4})$/);
+    if (m) { var n = parseInt(m[1], 10); if (!isNaN(n) && n > maxNum) maxNum = n; }
   });
   return "ZED" + String(maxNum + 1).padStart(4, "0");
 }
