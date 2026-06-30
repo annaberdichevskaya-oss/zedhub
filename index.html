@@ -556,7 +556,7 @@ function renderRequests() {
 function renderOrders() {
   var filtered = db.orders.filter(function(o) {
     var q = ordSearch.toLowerCase();
-    var matchSearch = !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route||"").toLowerCase().indexOf(q) >= 0;
+    var matchSearch = !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route_full||o.route||"").toLowerCase().indexOf(q) >= 0;
     var matchManager = ordManagerSel.length===0 || ordManagerSel.indexOf(o.manager||"") >= 0;
     var matchLogist = ordLogistSel.length===0 || ordLogistSel.indexOf(o.logist||"") >= 0;
     var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
@@ -649,7 +649,7 @@ function renderOrders() {
     html += "<tr class='" + (_selectedOrders[o.id]?"row-selected":"") + "'>"
       + "<td style='text-align:center'><input type='checkbox' " + (_selectedOrders[o.id]?"checked":"") + " onchange='toggleOrderSelect(" + o.id + ",this.checked)'></td>"
       + "<td><div class='order-id'>" + o.order_id + "</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>" + (o.req_id||"") + " &bull; " + fmtDate(o.date||"") + "</div></td>"
-      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + o.client + "</div><div style='font-size:10px;color:#6b7280'>" + (o.route||"") + "</div></td>"
+      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + o.client + "</div><div style='font-size:10px;color:#6b7280'>" + (o.route_full||o.route||"") + "</div></td>"
       + "<td><div style='font-size:11px'>" + (o.booking||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + (o.container||"") + "</div></td>"
       + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + (fmtDate(o.cutoff)||"—") + "</td>"
       + "<td><div style='font-size:11px'>" + (fmtDate(o.etd)||"—") + "</div><div style='font-size:11px;color:#16a34a'>" + fmtDate(o.eta||"") + "</div></td>"
@@ -851,7 +851,6 @@ function showOrderModal(o) {
     + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : "ZED-2026-") + "'></div>"
     + "<div class='field'><label>ДАТА ОРДЕРУ</label>" + dateInput("of-date", isEdit ? (o.date||"") : new Date().toLocaleDateString("uk-UA")) + "</div>"
     + "<div class='field'><label>КЛІЄНТ</label><select id='of-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&o.client===c.name)?" selected":"") + ">" + c.name + "</option>";}).join("") + "</select></div>"
-    + "<div class='field'><label>МАРШРУТ</label><input id='of-route' value='" + escQ(isEdit ? o.route : "") + "'></div>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
     + "</div>"
 
@@ -914,7 +913,7 @@ function saveOrder(id) {
   var oid = gv("of-oid").trim();
   if (!oid) { alert("Введіть ORDER ID"); return; }
   var data = {
-    order_id: oid, client: gv("of-client"), route: gv("of-route"),
+    order_id: oid, client: gv("of-client"), route: gv("of-rfull"),
     req_id: gv("of-req"), date: fromISODate(gv("of-date")),
     booking: gv("of-book"), carrier: gv("of-carr"),
     container: gv("of-cont"), cutoff: fromISODate(gv("of-cut")),
