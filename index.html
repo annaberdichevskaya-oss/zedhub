@@ -848,7 +848,7 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Ордер</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : "ZED-2026-") + "'></div>"
+    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : genOrderNum()) + "'></div>"
     + "<div class='field'><label>ДАТА ОРДЕРУ</label>" + dateInput("of-date", isEdit ? (o.date||"") : new Date().toLocaleDateString("uk-UA")) + "</div>"
     + "<div class='field'><label>КЛІЄНТ</label><select id='of-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&o.client===c.name)?" selected":"") + ">" + c.name + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
@@ -1105,6 +1105,19 @@ function genReqNum() {
     if (!isNaN(n) && n > maxNum) maxNum = n;
   });
   return String(maxNum + 1).padStart(4, "0");
+}
+
+function genOrderNum() {
+  // Наступний номер ZED з урахуванням усіх існуючих ордерів
+  var maxNum = 0;
+  db.orders.forEach(function(o){
+    var match = String(o.order_id||"").match(/(\d+)\s*$/); // останні цифри в order_id
+    if (match) {
+      var n = parseInt(match[1], 10);
+      if (!isNaN(n) && n > maxNum) maxNum = n;
+    }
+  });
+  return "ZED" + String(maxNum + 1).padStart(4, "0");
 }
 
 
