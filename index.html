@@ -133,7 +133,10 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
       <span id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span>
       <span id="sync-text">Синхронізовано</span>
     </span>
-    <button class="hbtn" onclick="exportCurrentExcel()">📤 Excel</button>
+    <button class="hbtn" onclick="importExcel()">📥 Імпорт Excel</button>
+    <input type="file" id="excel-inp" accept=".xlsx,.xls" style="display:none" onchange="handleExcel(this.files[0])">
+    <button class="hbtn" onclick="importRejestrXlsx()">📥 Реєстр Excel</button>
+    <input type="file" id="rejestr-xlsx-inp" accept=".xlsx,.xls" style="display:none" onchange="handleRejestrXlsx(this.files[0])">
     <button class="hbtn" onclick="exportBackup()">💾 Бекап</button>
     <input type="file" id="restore-inp" accept=".json" style="display:none" onchange="restoreBackup(this.files[0])">
     <button class="hbtn" onclick="document.getElementById('restore-inp').click()">📂 Відновити</button>
@@ -186,7 +189,7 @@ var TRANSPORT_TYPES = ["Авто","Море","Авіа","Комбіноване"
 
 function statusPill(status, map) {
   var cls = (map || {})[status] || "p-wait";
-  return "<span class='pill " + cls + "'>" + (status || "—") + "</span>";
+  return "<span class='pill " + cls + "'>" + escQ(status || "—") + "</span>";
 }
 
 function reqPill(s) { return statusPill(s, REQ_STATUS_MAP); }
@@ -456,12 +459,8 @@ var currentTab = "requests";
 var reqSearch = "";
 var reqSort = "new";
 var reqFilter = "";
-var reqDateFrom = "";
-var reqDateTo = "";
 var ordSearch = "";
 var ordSort = "new";
-var ordDateFrom = "";
-var ordDateTo = "";
 var ordManagerSel = [];
 var ordLogistSel = [];
 var ordExecOpen = false;
@@ -491,8 +490,7 @@ function renderRequests() {
     var q = reqSearch.toLowerCase();
     var matchQ = !q || r.client.toLowerCase().indexOf(q) >= 0 || r.route.toLowerCase().indexOf(q) >= 0 || (r.cargo||"").toLowerCase().indexOf(q) >= 0;
     var matchF = !reqFilter || r.status === reqFilter;
-    var matchD = inDateRange(r.date, reqDateFrom, reqDateTo);
-    return matchQ && matchF && matchD;
+    return matchQ && matchF;
   });
   filtered.sort(function(a,b){
     var x = (a.req_num||""), y = (b.req_num||"");
@@ -511,14 +509,12 @@ function renderRequests() {
     + "</div>";
 
   html += "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук по клієнту, маршруту...' value='" + reqSearch + "' oninput='reqSearch=this.value;renderRequests()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук по клієнту, маршруту...' value='" + escQ(reqSearch) + "' oninput='reqSearch=this.value;renderRequests()'>"
     + "<select class='filter-sel' onchange='reqFilter=this.value;renderRequests()'>"
     + "<option value=''>Всі статуси</option>"
     + REQ_STATUSES.map(function(s){return "<option value='" + s + "'" + (reqFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select>"
     + "<button class='btn btn-gray' onclick='reqSort=reqSort===\"new\"?\"old\":\"new\";renderRequests()'>" + (reqSort==="new"?"↓ Новіші":"↑ Старіші") + "</button>"
-    + "<span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7280'>📅 <input type='date' class='filter-sel' style='padding:5px 8px' value='" + reqDateFrom + "' onchange='reqDateFrom=this.value;renderRequests()'> — <input type='date' class='filter-sel' style='padding:5px 8px' value='" + reqDateTo + "' onchange='reqDateTo=this.value;renderRequests()'>"
-    + (reqDateFrom||reqDateTo ? " <button class='act-btn' onclick='reqDateFrom=\"\";reqDateTo=\"\";renderRequests()'>✕</button>" : "") + "</span>"
     + "<button class='btn btn-yellow' onclick='openAddRequest()'>+ Новий запит</button>"
     + "</div>";
 
@@ -536,11 +532,11 @@ function renderRequests() {
 
   filtered.forEach(function(r) {
     html += "<tr class='" + (r.status==="Accepted"?"highlight":"") + "'>"
-      + "<td><span style='font-family:monospace;font-size:11px;color:#374151'>" + (r.req_num||"—") + "</span></td>"
-      + "<td style='color:#6b7280;font-size:11px'>" + (r.date||"") + "</td>"
-      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + r.client + "</div><div style='font-size:10px;color:#9ca3af'>" + (r.contact||"") + "</div></td>"
-      + "<td class='col-route'><div style='font-size:12px'>" + r.route + "</div><div style='font-size:10px'><span class='tag'>" + (r.type||"") + "</span></div></td>"
-      + "<td><div style='font-size:12px'>" + (r.cargo||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + (r.weight||"") + "</div></td>"
+      + "<td><span style='font-family:monospace;font-size:11px;color:#374151'>" + escQ(r.req_num||"—") + "</span></td>"
+      + "<td style='color:#6b7280;font-size:11px'>" + escQ(r.date||"") + "</td>"
+      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + escQ(r.client) + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(r.contact||"") + "</div></td>"
+      + "<td class='col-route'><div style='font-size:12px'>" + escQ(r.route) + "</div><div style='font-size:10px'><span class='tag'>" + escQ(r.type||"") + "</span></div></td>"
+      + "<td><div style='font-size:12px'>" + escQ(r.cargo||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(r.weight||"") + "</div></td>"
       + "<td class='col-sum' style='font-weight:600;font-size:12px;color:#16a34a'>$ " + ((r.sum_brutto||0)-(r.sum_netto||0)).toLocaleString("uk-UA") + "</td>"
       + "<td class='col-status'>" + reqPill(r.status) + "</td>"
       + "<td><select style='font-size:11px;padding:3px 5px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' onchange='updateReqManager(" + r.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((r.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select></td>"
@@ -564,8 +560,7 @@ function renderOrders() {
     var matchManager = ordManagerSel.length===0 || ordManagerSel.indexOf(o.manager||"") >= 0;
     var matchLogist = ordLogistSel.length===0 || ordLogistSel.indexOf(o.logist||"") >= 0;
     var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
-    var matchD = inDateRange(o.date, ordDateFrom, ordDateTo);
-    return matchSearch && matchManager && matchLogist && matchCargo && matchD;
+    return matchSearch && matchManager && matchLogist && matchCargo;
   });
   filtered.sort(function(a,b){
     if (ordSort === "eta" || ordSort === "etd" || ordSort === "cutoff") {
@@ -596,7 +591,7 @@ function renderOrders() {
 
   var selCount = Object.keys(_selectedOrders).length;
   html += "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + ordSearch + "' oninput='ordSearch=this.value;renderOrders()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + escQ(ordSearch) + "' oninput='ordSearch=this.value;renderOrders()'>"
     + (function(){
         var cnt = ordManagerSel.length + ordLogistSel.length;
         var btn = "<div style='position:relative;display:inline-block;z-index:120'>"
@@ -632,8 +627,6 @@ function renderOrders() {
     + "<option value='cutoff'" + (ordSort==="cutoff"?" selected":"") + ">⏰ CUT-OFF — найближчі</option>"
     + "</select>"
     + (selCount > 0 ? "<button class='btn' style='background:#ef4444;color:#fff;border-color:#ef4444' onclick='deleteSelectedOrders()'>🗑 Видалити вибрані (" + selCount + ")</button>" : "")
-    + "<span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7280'>📅 <input type='date' class='filter-sel' style='padding:5px 8px' value='" + ordDateFrom + "' onchange='ordDateFrom=this.value;renderOrders()'> — <input type='date' class='filter-sel' style='padding:5px 8px' value='" + ordDateTo + "' onchange='ordDateTo=this.value;renderOrders()'>"
-    + (ordDateFrom||ordDateTo ? " <button class='act-btn' onclick='ordDateFrom=\"\";ordDateTo=\"\";renderOrders()'>✕</button>" : "") + "</span>"
     + "<button class='btn btn-yellow' onclick='openAddOrder()'>+ Новий ордер</button>"
     + "</div>";
 
@@ -647,22 +640,21 @@ function renderOrders() {
   html += "<div class='table-wrap'><table><thead><tr>"
     + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
-    + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>ГОТОВНІСТЬ</th><th>CUT-OFF</th>"
-    + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МИТНИЦЯ PL</th><th>ПЕРЕТАРКА</th>"
-    + "<th>МИТНИЦЯ UA</th><th>ДОСТАВКА UA</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>CUT-OFF</th>"
+    + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>ПЕРЕТАРКА</th>"
+    + "<th>МИТНИЦЯ</th><th>ДОСТАВКА UA</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $ / ОПЛАТА</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
+    var docUrl = safeDocUrl(o.docs);
     html += "<tr class='" + (_selectedOrders[o.id]?"row-selected":"") + "'>"
       + "<td style='text-align:center'><input type='checkbox' " + (_selectedOrders[o.id]?"checked":"") + " onchange='toggleOrderSelect(" + o.id + ",this.checked)'></td>"
-      + "<td><div class='order-id'>" + o.order_id + "</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>" + (o.req_id||"") + " &bull; " + fmtDate(o.date||"") + "</div></td>"
-      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + o.client + "</div><div style='font-size:10px;color:#6b7280'>" + (o.route_full||o.route||"") + "</div></td>"
-      + "<td><div style='font-size:11px'>" + (o.booking||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + (o.container||"") + "</div></td>"
-      + "<td style='font-size:11px;color:#0e7490'>" + (fmtDate(o.ready_date)||"—") + "</td>"
-      + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + (fmtDate(o.cutoff)||"—") + "</td>"
-      + "<td><div style='font-size:11px'>" + (fmtDate(o.etd)||"—") + "</div><div style='font-size:11px;color:#16a34a'>" + fmtDate(o.eta||"") + "</div></td>"
+      + "<td><div class='order-id'>" + escQ(o.order_id) + "</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>" + escQ(o.req_id||"") + " &bull; " + escQ(fmtDate(o.date||"")) + "</div></td>"
+      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + escQ(o.client) + "</div><div style='font-size:10px;color:#6b7280'>" + escQ(o.route_full||o.route||"") + "</div>" + (o.carrier ? "<div style='font-size:10px;color:#9ca3af'>🚢 " + escQ(o.carrier) + "</div>" : "") + "</td>"
+      + "<td><div style='font-size:11px'>" + escQ(o.booking||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(o.container||"") + "</div></td>"
+      + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + escQ(fmtDate(o.cutoff)||"—") + "</td>"
+      + "<td><div style='font-size:11px'>" + escQ(fmtDate(o.etd)||"—") + "</div><div style='font-size:11px;color:#16a34a'>" + escQ(fmtDate(o.eta||"")) + "</div></td>"
       + "<td>" + statusPill(o.cargo_status, {"Очікує завантаження":"p-calc","Завантажено":"p-new","В дорозі":"p-book","Прибув":"p-wait","Розвантажено":"p-clear","TBD":"p-reject"}) + "</td>"
-      + "<td>" + custPill(o.customs_pl_status||"TBD") + "</td>"
       + "<td>"
       + "<select class='pill-select " + resortCls(o.resort) + "' onchange='updateResort(" + o.id + ",this.value)'>"
       + RESORT_STATUSES.map(function(s){ return "<option" + (o.resort===s?" selected":"") + ">" + s + "</option>"; }).join("")
@@ -681,14 +673,14 @@ function renderOrders() {
       + "</select>"
       + "</td>"
       + "<td style='text-align:center'>"
-      + (o.docs ? "<a href='" + o.docs + "' target='_blank' style='color:#f59e0b;font-size:16px;text-decoration:none'>📁</a>" : "<span style='color:#d1d5db'>—</span>")
+      + (docUrl ? "<a href='" + escQ(docUrl) + "' target='_blank' style='color:#f59e0b;font-size:16px;text-decoration:none'>📁</a>" : "<span style='color:#d1d5db'>—</span>")
       + "</td>"
       + "<td style='text-align:center'>"
       + (function(){
           var cli = (db.clients||[]).find(function(c){ return (c.name||"").trim().toLowerCase()===(o.client||"").trim().toLowerCase(); });
           var email = cli && cli.emails && cli.emails.length ? cli.emails.join(",") : "";
           if (email) {
-            return "<span style='color:#3b82f6;font-size:16px;cursor:pointer' title='" + email + "' onclick='sendOrderMail(" + o.id + ")'>✉️</span>";
+            return "<span style='color:#3b82f6;font-size:16px;cursor:pointer' title='" + escQ(email) + "' onclick='sendOrderMail(" + o.id + ")'>✉️</span>";
           } else {
             return "<span style='color:#f59e0b;font-size:16px;cursor:pointer' title='Додати email у вкладці Клієнти' onclick='switchTab(\"clients\")'>✉️</span>";
           }
@@ -723,7 +715,7 @@ function showRequestModal(r) {
     + "<div class='section-title'>Базова інформація</div>"
     + "<div class='form-grid'>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='rf-num' value='" + escQ(num) + "'></div>"
-    + "<div class='field'><label>КЛІЄНТ *</label><select id='rf-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&r.client===c.name)?" selected":"") + ">" + c.name + "</option>";}).join("") + "</select></div>"
+    + "<div class='field'><label>КЛІЄНТ *</label><select id='rf-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&r.client===c.name)?" selected":"") + ">" + escQ(c.name) + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>КОНТАКТ</label><input id='rf-contact' value='" + escQ(isEdit ? (r.contact||"") : "") + "'></div>"
     + "<div class='field'><label>МАРШРУТ</label><input id='rf-route' value='" + escQ(isEdit ? r.route : "") + "'></div>"
     + "<div class='field'><label>ТИП ПЕРЕВЕЗЕННЯ</label><select id='rf-type'>"
@@ -748,7 +740,7 @@ function showRequestModal(r) {
     + "</div>"
     + "<div class='form-grid full'>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ КЛІЄНТА (OneDrive)</label><input id='rf-docs' value='" + escQ(isEdit ? (r.docs||"") : "") + "' placeholder='https://...'></div>"
-    + "<div class='field'><label>КОМЕНТАР</label><textarea id='rf-comment'>" + (isEdit ? (r.comment||"") : "") + "</textarea></div>"
+    + "<div class='field'><label>КОМЕНТАР</label><textarea id='rf-comment'>" + escQ(isEdit ? (r.comment||"") : "") + "</textarea></div>"
     + "</div>"
     + "<div class='modal-btns'>"
     + "<button class='btn btn-gray' onclick='closeModal()'>Скасувати</button>"
@@ -812,21 +804,23 @@ function deleteRequest(id) {
 function createOrder(reqId) {
   var r = db.requests.find(function(x){return x.id===reqId;});
   if (!r) return;
+  // Ордер отримує власний наскрізний номер (ZED + наступний по порядку),
+  // незалежно від № запиту. Запит зберігає свій номер.
   if (!r.order_id) {
-    r.order_id = "ZED" + (r.req_num || genReqNum());
+    r.order_id = genOrderId();
     saveOne("requests", r);
   }
   var o = {
     id: nextId(db.orders),
     order_id: r.order_id, client: r.client, route: r.route,
     req_id: r.req_num||"", date: new Date().toLocaleDateString("uk-UA"),
-    incoterms: "", booking: "", carrier: "", container: "", ready_date: r.ready_date||"",
+    incoterms: "", booking: "", carrier: "", container: "",
     cutoff: "", route_full: r.route, etd: "", eta: "",
     bol: "", cargo_status: "TBD", decl: "",
-    customs_pl_status: "TBD", customs_status: "TBD", customs_date: "",
+    customs_status: "TBD", customs_date: "",
     resort: "TBD", resort_addr: "", resort_comment: "",
     logist_ua: "", transport_ua: "", delivery_status: "TBD", delivery_date: "",
-    invoice_sum: 0, sum_netto: 0, sum_brutto: 0, payment_status: "TBD", payment_date: "",
+    invoice_sum: (r.sum_brutto||0)-(r.sum_netto||0), sum_netto: r.sum_netto||0, sum_brutto: r.sum_brutto||0, payment_status: "TBD", payment_date: "",
     docs: r.docs||"", notes: r.comment||""
   };
   db.orders.unshift(o);
@@ -844,6 +838,13 @@ function openEditOrder(id) {
   if (o) { _editingVersion = o._v || 0; showOrderModal(o); }
 }
 
+function openOrderFromTask(orderId) {
+  var o = (db.orders||[]).find(function(x){ return x.order_id === orderId; });
+  if (!o) { alert("Ордер " + orderId + " не знайдено"); return; }
+  _editingVersion = o._v || 0;
+  showOrderModal(o);
+}
+
 function sel(id, arr, val) {
   return "<select id='" + id + "'>" + arr.map(function(s){return "<option" + (s===val?" selected":"") + ">" + s + "</option>";}).join("") + "</select>";
 }
@@ -857,18 +858,17 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Ордер</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : genOrderNum()) + "'></div>"
+    + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : genOrderId()) + "'></div>"
     + "<div class='field'><label>ДАТА ОРДЕРУ</label>" + dateInput("of-date", isEdit ? (o.date||"") : new Date().toLocaleDateString("uk-UA")) + "</div>"
-    + "<div class='field'><label>КЛІЄНТ</label><select id='of-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&o.client===c.name)?" selected":"") + ">" + c.name + "</option>";}).join("") + "</select></div>"
+    + "<div class='field'><label>КЛІЄНТ</label><select id='of-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&o.client===c.name)?" selected":"") + ">" + escQ(c.name) + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
     + "</div>"
 
     + "<div class='section-title'>Букінг та перевезення</div>"
     + "<div class='form-grid'>"
     + "<div class='field'><label>ПІДТВЕРДЖЕНИЙ БУКІНГ</label><input id='of-book' value='" + escQ(isEdit ? (o.booking||"") : "") + "'></div>"
-    + "<div class='field'><label>ПЕРЕВІЗНИК</label><input id='of-carr' value='" + escQ(isEdit ? (o.carrier||"") : "") + "'></div>"
+    + "<div class='field'><label>ПЕРЕВІЗНИК / ШИППЕР</label><input id='of-carr' value='" + escQ(isEdit ? (o.carrier||"") : "") + "'></div>"
     + "<div class='field'><label>КОНТЕЙНЕР №</label><input id='of-cont' value='" + escQ(isEdit ? (o.container||"") : "") + "'></div>"
-    + "<div class='field'><label>ДАТА ГОТОВНОСТІ ВАНТАЖУ</label>" + dateInput("of-ready", isEdit ? (o.ready_date||"") : "") + "</div>"
     + "<div class='field'><label>CUT-OFF</label>" + dateInput("of-cut", isEdit ? (o.cutoff||"") : "") + "</div>"
     + "<div class='field'><label>МАРШРУТ відпр → приб</label><input id='of-rfull' value='" + escQ(isEdit ? (o.route_full||"") : "") + "'></div>"
     + "<div class='field'><label>ETD</label>" + dateInput("of-etd", isEdit ? (o.etd||"") : "") + "</div>"
@@ -880,8 +880,7 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Митне оформлення</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>СТАТУС МИТНИЦІ PL</label>" + sel("of-custpl", CUSTOMS_STATUSES, isEdit ? (o.customs_pl_status||"TBD") : "TBD") + "</div>"
-    + "<div class='field'><label>СТАТУС МИТНИЦІ UA</label>" + sel("of-cust", CUSTOMS_STATUSES, isEdit ? o.customs_status : "TBD") + "</div>"
+    + "<div class='field'><label>СТАТУС МИТНИЦІ</label>" + sel("of-cust", CUSTOMS_STATUSES, isEdit ? o.customs_status : "TBD") + "</div>"
     + "<div class='field'><label>ДАТА РОЗМИТНЕННЯ</label>" + dateInput("of-custdate", isEdit ? (o.customs_date||"") : "") + "</div>"
     + "</div>"
 
@@ -910,7 +909,7 @@ function showOrderModal(o) {
     + "<div class='field'><label>МЕНЕДЖЕР</label><select id='of-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&o.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>ЛОГІСТ</label><select id='of-logist'>" + LOGISTS.map(function(l){return "<option" + ((isEdit&&o.logist===l)?" selected":"") + ">" + l + "</option>";}).join("") + "</select></div>"
     + "</div>"
-    + "<div class='form-grid full'><div class='field'><label>ПРИМІТКИ</label><textarea id='of-notes'>" + (isEdit ? (o.notes||"") : "") + "</textarea></div></div>"
+    + "<div class='form-grid full'><div class='field'><label>ПРИМІТКИ</label><textarea id='of-notes'>" + escQ(isEdit ? (o.notes||"") : "") + "</textarea></div></div>"
 
     + "<div class='modal-btns'>"
     + "<button class='btn btn-gray' onclick='closeModal()'>Скасувати</button>"
@@ -927,10 +926,10 @@ function saveOrder(id) {
     order_id: oid, client: gv("of-client"), route: gv("of-rfull"),
     req_id: gv("of-req"), date: fromISODate(gv("of-date")),
     booking: gv("of-book"), carrier: gv("of-carr"),
-    container: gv("of-cont"), ready_date: fromISODate(gv("of-ready")), cutoff: fromISODate(gv("of-cut")),
+    container: gv("of-cont"), cutoff: fromISODate(gv("of-cut")),
     route_full: gv("of-rfull"), etd: fromISODate(gv("of-etd")), eta: fromISODate(gv("of-eta")),
     bol: gv("of-bol"), cargo_status: gv("of-carg"), decl: gv("of-decl"),
-    customs_pl_status: gv("of-custpl"), customs_status: gv("of-cust"), customs_date: fromISODate(gv("of-custdate")),
+    customs_status: gv("of-cust"), customs_date: fromISODate(gv("of-custdate")),
     resort: gv("of-resort"), resort_addr: gv("of-resaddr"),
     logist_ua: gv("of-log"), transport_ua: gv("of-trans"),
     delivery_status: gv("of-deliv"), delivery_date: fromISODate(gv("of-delivdate")),
@@ -1050,7 +1049,18 @@ function deleteOrder(id) {
 
 // ── Helpers ──────────────────────────────────────────────────────
 function gv(id) { var e=document.getElementById(id); return e ? e.value : ""; }
-function escQ(s) { return (s||"").replace(/'/g,"&#39;").replace(/"/g,"&quot;"); }
+function escQ(s) {
+  return String(s||"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+function safeDocUrl(u) {
+  var s = String(u||"").trim();
+  return /^(https?:|mailto:)/i.test(s) ? s : "";
+}
 function nextId(arr) { return arr.reduce(function(m,x){return Math.max(m,x.id||0);},0)+1; }
 function closeModal() { document.getElementById("modal-area").innerHTML = ""; }
 
@@ -1109,83 +1119,8 @@ function parseDateVal(s) {
   return null;
 }
 
-
-function filteredRequests() {
-  return db.requests.filter(function(r) {
-    var q = reqSearch.toLowerCase();
-    var matchQ = !q || r.client.toLowerCase().indexOf(q) >= 0 || r.route.toLowerCase().indexOf(q) >= 0 || (r.cargo||"").toLowerCase().indexOf(q) >= 0;
-    var matchF = !reqFilter || r.status === reqFilter;
-    var matchD = inDateRange(r.date, reqDateFrom, reqDateTo);
-    return matchQ && matchF && matchD;
-  });
-}
-
-
-function exportCurrentExcel() {
-  if (currentTab === "orders") exportOrdersExcel();
-  else if (currentTab === "requests") exportRequestsExcel();
-  else { alert("Експорт доступний для вкладок Запити та Ордери"); }
-}
-
-function exportRequestsExcel() {
-  var rows = filteredRequests().map(function(r){
-    return {
-      "№ Запиту": r.req_num||"", "Дата": r.date||"", "Клієнт": r.client||"", "Контакт": r.contact||"",
-      "Маршрут": r.route||"", "Тип": r.type||"", "Вантаж": r.cargo||"", "Вага/Обсяг": r.weight||"",
-      "Дата готовності": r.ready_date||"", "Нетто $": r.sum_netto||0, "Брутто $": r.sum_brutto||0,
-      "Націнка $": (r.sum_brutto||0)-(r.sum_netto||0), "Статус": r.status||"", "Менеджер": r.manager||"", "Коментар": r.comment||""
-    };
-  });
-  if (!rows.length) { alert("Немає запитів для експорту"); return; }
-  var ws = XLSX.utils.json_to_sheet(rows);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Запити");
-  XLSX.writeFile(wb, "zapyty-" + new Date().toLocaleDateString("uk-UA").replace(/\./g,"-") + ".xlsx");
-}
-
-function filteredOrdersForExport() {
-  return db.orders.filter(function(o) {
-    var q = ordSearch.toLowerCase();
-    var matchSearch = !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route_full||o.route||"").toLowerCase().indexOf(q) >= 0;
-    var matchManager = ordManagerSel.length===0 || ordManagerSel.indexOf(o.manager||"") >= 0;
-    var matchLogist = ordLogistSel.length===0 || ordLogistSel.indexOf(o.logist||"") >= 0;
-    var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
-    var matchD = inDateRange(o.date, ordDateFrom, ordDateTo);
-    return matchSearch && matchManager && matchLogist && matchCargo && matchD;
-  });
-}
-
-function exportOrdersExcel() {
-  var rows = filteredOrdersForExport().map(function(o){
-    return {
-      "ORDER ID": o.order_id||"", "№ Запиту": o.req_id||"", "Дата": o.date||"", "Клієнт": o.client||"",
-      "Маршрут": o.route_full||o.route||"", "Букінг": o.booking||"", "Перевізник": o.carrier||"", "Контейнер": o.container||"",
-      "Готовність": o.ready_date||"", "Cut-off": o.cutoff||"", "ETD": o.etd||"", "ETA": o.eta||"",
-      "Статус вантажу": o.cargo_status||"", "Митниця PL": o.customs_pl_status||"", "Перетарка": o.resort||"", "Митниця UA": o.customs_status||"", "Дата розмитнення": o.customs_date||"",
-      "Доставка UA": o.delivery_status||"", "Дата доставки": o.delivery_date||"",
-      "Нетто $": o.sum_netto||0, "Брутто $": o.sum_brutto||0, "Націнка $": (o.sum_brutto||0)-(o.sum_netto||0),
-      "Оплата": o.payment_status||"", "Дата оплати": o.payment_date||"",
-      "Менеджер": o.manager||"", "Логіст": o.logist||"", "Примітки": o.notes||""
-    };
-  });
-  if (!rows.length) { alert("Немає ордерів для експорту"); return; }
-  var ws = XLSX.utils.json_to_sheet(rows);
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Ордери");
-  XLSX.writeFile(wb, "ordery-" + new Date().toLocaleDateString("uk-UA").replace(/\./g,"-") + ".xlsx");
-}
-
-
-function inDateRange(dateStr, fromISO, toISO) {
-  if (!fromISO && !toISO) return true;
-  var t = parseDateVal(dateStr);
-  if (t === null) return false;
-  if (fromISO) { var f = parseDateVal(fromISO.split("-").reverse().join(".")); if (f !== null && t < f) return false; }
-  if (toISO) { var to = parseDateVal(toISO.split("-").reverse().join(".")); if (to !== null && t > to) return false; }
-  return true;
-}
-
 function genReqNum() {
+  // Номер запиту — власний лічильник запитів (незалежний від ордерів)
   var maxNum = 0;
   db.requests.forEach(function(r){
     var n = parseInt(r.req_num, 10);
@@ -1194,15 +1129,14 @@ function genReqNum() {
   return String(maxNum + 1).padStart(4, "0");
 }
 
-function genOrderNum() {
-  // Наступний номер ZED з урахуванням усіх існуючих ордерів
+function genOrderId() {
+  // Номер ордера — власний наскрізний лічильник (ZED0001, ZED0002…),
+  // завжди наступний після найбільшого існуючого. Довгі реєстрові
+  // номери (ZED + 5+ цифр) не враховуються, щоб не "стрибати".
   var maxNum = 0;
   db.orders.forEach(function(o){
-    var match = String(o.order_id||"").match(/(\d+)\s*$/); // останні цифри в order_id
-    if (match) {
-      var n = parseInt(match[1], 10);
-      if (!isNaN(n) && n > maxNum) maxNum = n;
-    }
+    var m = String(o.order_id||"").match(/^ZED0*(\d{1,4})$/);
+    if (m) { var n = parseInt(m[1], 10); if (!isNaN(n) && n > maxNum) maxNum = n; }
   });
   return "ZED" + String(maxNum + 1).padStart(4, "0");
 }
@@ -1216,7 +1150,7 @@ function renderClients() {
     return !q || c.name.toLowerCase().indexOf(q) >= 0 || (c.contact||"").toLowerCase().indexOf(q) >= 0 || (c.emails||[]).join(" ").toLowerCase().indexOf(q) >= 0;
   });
   filtered.sort(function(a,b){ return (a.name||"").localeCompare(b.name||"", "uk"); });
-  var html = "<div class='toolbar'><input class='search-box' placeholder='Пошук клієнта...' value='" + cliSearch + "' oninput='cliSearch=this.value;renderClients()'><button class='btn btn-yellow' onclick='openAddClient()'>+ Додати клієнта</button></div>";
+  var html = "<div class='toolbar'><input class='search-box' placeholder='Пошук клієнта...' value='" + escQ(cliSearch) + "' oninput='cliSearch=this.value;renderClients()'><button class='btn btn-yellow' onclick='openAddClient()'>+ Додати клієнта</button></div>";
   if (!filtered.length) {
     html += "<div style='text-align:center;padding:60px;color:#9ca3af'>Додайте першого клієнта</div>";
     document.getElementById("main-content").innerHTML = html;
@@ -1226,12 +1160,12 @@ function renderClients() {
     + "<th>КЛІЄНТ</th><th>КОНТАКТ</th><th>ТЕЛЕФОН</th><th>EMAIL</th><th>ТЕГИ</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
   filtered.forEach(function(c) {
-    var emails = (c.emails||[]).join(", ");
-    var tags = (c.tags||[]).map(function(t){return "<span class='cc-tag'>" + t + "</span>";}).join(" ");
+    var emails = escQ((c.emails||[]).join(", "));
+    var tags = (c.tags||[]).map(function(t){return "<span class='cc-tag'>" + escQ(t) + "</span>";}).join(" ");
     html += "<tr>"
-      + "<td style='font-weight:600'>" + c.name + "</td>"
-      + "<td>" + (c.contact||"—") + "</td>"
-      + "<td style='white-space:nowrap'>" + (c.phone||"—") + "</td>"
+      + "<td style='font-weight:600'>" + escQ(c.name) + "</td>"
+      + "<td>" + escQ(c.contact||"—") + "</td>"
+      + "<td style='white-space:nowrap'>" + escQ(c.phone||"—") + "</td>"
       + "<td style='font-size:11px;color:#3b82f6'>" + (emails||"—") + "</td>"
       + "<td>" + (tags||"") + "</td>"
       + "<td style='white-space:nowrap'>"
@@ -1314,7 +1248,7 @@ function renderReference() {
     return !q || (x.title||"").toLowerCase().indexOf(q) >= 0 || (x.text||"").toLowerCase().indexOf(q) >= 0;
   });
   var html = "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук у довіднику...' value='" + refSearch + "' oninput='refSearch=this.value;renderReference()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук у довіднику...' value='" + escQ(refSearch) + "' oninput='refSearch=this.value;renderReference()'>"
     + "<button class='btn btn-yellow' onclick='openAddRef()'>+ Додати запис</button>"
     + "</div>";
   if (!filtered.length) {
@@ -1326,11 +1260,11 @@ function renderReference() {
   filtered.forEach(function(x) {
     var links = (x.links||[]).map(function(l){
       var url = l.indexOf("http")===0 ? l : "https://" + l;
-      return "<a href='" + url + "' target='_blank' class='ref-link'>🔗 " + l + "</a>";
+      return "<a href='" + escQ(url) + "' target='_blank' class='ref-link'>🔗 " + escQ(l) + "</a>";
     }).join("");
     html += "<div class='ref-card'>"
-      + "<div class='ref-title'>" + (x.title||"Без назви") + "</div>"
-      + (x.text ? "<div class='ref-text'>" + x.text.replace(/\n/g,"<br>") + "</div>" : "")
+      + "<div class='ref-title'>" + escQ(x.title||"Без назви") + "</div>"
+      + (x.text ? "<div class='ref-text'>" + escQ(x.text).replace(/\n/g,"<br>") + "</div>" : "")
       + (links ? "<div class='ref-links'>" + links + "</div>" : "")
       + "<div class='ref-actions'>"
       + "<button class='act-btn' onclick='openEditRef(" + x.id + ")'>✏️ Редагувати</button>"
@@ -1353,7 +1287,7 @@ function showRefModal(x) {
   var html = "<div class='modal-bg' id='ref-modal'><div class='modal'>"
     + "<div class='modal-title'>" + (isEdit ? "✏️ Редагувати запис" : "➕ Новий запис") + "</div>"
     + "<div class='form-grid full'><div class='field'><label>НАЗВА *</label><input id='rff-title' value='" + escQ(isEdit ? x.title : "") + "' placeholder='Напр. Контакти митного брокера'></div></div>"
-    + "<div class='form-grid full'><div class='field'><label>ТЕКСТ / НОТАТКА</label><textarea id='rff-text' style='min-height:120px'>" + (isEdit ? (x.text||"") : "") + "</textarea></div></div>"
+    + "<div class='form-grid full'><div class='field'><label>ТЕКСТ / НОТАТКА</label><textarea id='rff-text' style='min-height:120px'>" + escQ(isEdit ? (x.text||"") : "") + "</textarea></div></div>"
     + "<div class='form-grid full'><div class='field'><label>🔗 ПОСИЛАННЯ (кожне з нового рядка)</label><textarea id='rff-links' style='min-height:70px' placeholder='https://...'>" + escQ(linksStr) + "</textarea></div></div>"
     + "<div class='modal-btns'>"
     + "<button class='btn btn-gray' onclick='closeModal()'>Скасувати</button>"
@@ -1435,7 +1369,7 @@ function renderTasker() {
     + "</div>";
 
   html += "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук задачі...' value='" + taskSearch + "' oninput='taskSearch=this.value;renderTasker()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук задачі...' value='" + escQ(taskSearch) + "' oninput='taskSearch=this.value;renderTasker()'>"
     + "<select class='filter-sel' onchange='taskAssigneeFilter=this.value;renderTasker()'>"
     + "<option value=''>👤 Всі виконавці</option>"
     + ALL_PEOPLE.map(function(p){return "<option value='" + p + "'" + (taskAssigneeFilter===p?" selected":"") + ">" + p + "</option>";}).join("")
@@ -1458,11 +1392,11 @@ function renderTasker() {
       + "<td><select class='pill-select " + taskStatusCls(t.status) + "' onchange='updateTaskStatus(" + t.id + ",this.value)'>"
       + TASK_STATUSES.map(function(s){return "<option" + (t.status===s?" selected":"") + ">" + s + "</option>";}).join("")
       + "</select></td>"
-      + "<td style='max-width:280px'><div style='font-size:12px;" + (t.status==="Виконана"?"text-decoration:line-through;color:#9ca3af":"") + "'>" + (t.text||"") + "</div></td>"
-      + "<td>" + (t.order_id ? "<span class='order-id'>" + t.order_id + "</span>" : "<span style='color:#d1d5db'>—</span>") + "</td>"
-      + "<td style='font-size:11px;color:#6b7280'>" + (t.author||"—") + "</td>"
-      + "<td style='font-size:11px;font-weight:600'>" + (t.assignee||"—") + "</td>"
-      + "<td style='font-size:11px;" + (overdue?"color:#ef4444;font-weight:700":"color:#6b7280") + "'>" + (fmtDate(t.deadline)||"—") + (overdue?" ⚠️":"") + "</td>"
+      + "<td style='max-width:280px'><div style='font-size:12px;" + (t.status==="Виконана"?"text-decoration:line-through;color:#9ca3af":"") + "'>" + escQ(t.text||"") + "</div></td>"
+      + "<td>" + (t.order_id ? "<span class='order-id' style='cursor:pointer;text-decoration:underline' title='Відкрити ордер' onclick='openOrderFromTask(\"" + escQ(t.order_id) + "\")'>" + escQ(t.order_id) + "</span>" : "<span style='color:#d1d5db'>—</span>") + "</td>"
+      + "<td style='font-size:11px;color:#6b7280'>" + escQ(t.author||"—") + "</td>"
+      + "<td style='font-size:11px;font-weight:600'>" + escQ(t.assignee||"—") + "</td>"
+      + "<td style='font-size:11px;" + (overdue?"color:#ef4444;font-weight:700":"color:#6b7280") + "'>" + escQ(fmtDate(t.deadline)||"—") + (overdue?" ⚠️":"") + "</td>"
       + "<td style='white-space:nowrap'>"
       + "<button class='act-btn' onclick='openEditTask(" + t.id + ")'>✏️</button> "
       + "<button class='act-btn del' onclick='deleteTask(" + t.id + ")'>✕</button>"
@@ -1491,7 +1425,7 @@ function showTaskModal(t, prefillOrder) {
   }).join(""); };
   var html = "<div class='modal-bg' id='task-modal'><div class='modal'>"
     + "<div class='modal-title'>" + (isEdit ? "✏️ Редагувати задачу" : "➕ Нова задача") + "</div>"
-    + "<div class='form-grid full'><div class='field'><label>ЗАДАЧА *</label><textarea id='tf-text' style='min-height:70px'>" + (isEdit ? (t.text||"") : "") + "</textarea></div></div>"
+    + "<div class='form-grid full'><div class='field'><label>ЗАДАЧА *</label><textarea id='tf-text' style='min-height:70px'>" + escQ(isEdit ? (t.text||"") : "") + "</textarea></div></div>"
     + "<div class='form-grid'>"
     + "<div class='field'><label>ОРДЕР (необов'язково)</label><input id='tf-order' value='" + escQ(orderVal) + "' placeholder='ZED0001'></div>"
     + "<div class='field'><label>ДЕДЛАЙН</label>" + dateInput("tf-deadline", isEdit ? (t.deadline||"") : "") + "</div>"
@@ -1564,6 +1498,76 @@ function sendOrderMail(orderId) {
   var subj = encodeURIComponent("Статус контейнера — " + o.order_id + (o.container ? " (" + o.container + ")" : ""));
   var body = encodeURIComponent("Доброго дня!\n\nІнформація по контейнеру:\nORDER ID: " + o.order_id + "\nНомер контейнера: " + (o.container||"—") + "\nСтатус вантажу: " + (o.cargo_status||"—") + "\n\nZ повагою,\nZED Logistics");
   window.open("mailto:" + email + "?subject=" + subj + "&body=" + body, "_blank");
+}
+function importExcel() { document.getElementById("excel-inp").click(); }
+function handleExcel(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, {type:"array"});
+      var imported = [];
+      if (wb.SheetNames.indexOf("Запити") >= 0) {
+        var ws = wb.Sheets["Запити"];
+        var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+        var dataRows = rows.slice(3);
+        var idCounter = db.requests.reduce(function(m,r){return Math.max(m,r.id||0);},0)+1;
+        dataRows.forEach(function(row) {
+          var reqNum = String(row[0]||"").trim();
+          if (!reqNum) return;
+          var clientParts = String(row[1]||"").split(String.fromCharCode(10));
+          var routeParts = String(row[2]||"").split(String.fromCharCode(10));
+          var r = { id: idCounter++, req_num: reqNum, date: "", client: clientParts[0]||"", contact: clientParts[1]||"", route: routeParts[0]||"", type: routeParts[1]||"", cargo: String(row[3]||""), weight: String(row[4]||""), sum_log: 0, sum_brok: 0, status: String(row[7]||"Новий запит"), order_id: String(row[8]||""), docs: "", comment: "" };
+          if (!db.requests.find(function(x){return x.req_num===r.req_num;})) imported.push(r);
+        });
+      }
+      db.requests = imported.concat(db.requests);
+      save();
+      imported.forEach(function(r){ queueSync("requests", r); });
+      render();
+      alert("Імпортовано: " + imported.length + " запитів");
+    } catch(err) { alert("Помилка: " + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function importRejestrXlsx() { document.getElementById("rejestr-xlsx-inp").click(); }
+function handleRejestrXlsx(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, {type:"array", cellDates:true});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false, dateNF:"dd.mm.yyyy"});
+      if (!db.clients) db.clients = [];
+      var clientName = "ТОВ «Гарні речі»";
+      if (!db.clients.find(function(c){return c.name===clientName;})) { db.clients.unshift({id:nextId(db.clients), name:clientName, contact:"", phone:"", emails:[], tags:["Основний"], notes:""}); }
+      var imported = 0, skipped = 0;
+      var ordId = db.orders.reduce(function(m,o){return Math.max(m,o.id||0);},0)+1;
+      for (var i = 276; i < rows.length; i++) {
+        var row = rows[i];
+        if (!row || !row[1]) continue;
+        var orderNum = String(row[1]).trim();
+        if (!orderNum || orderNum === "номер замовлення") continue;
+        if (db.orders.find(function(o){return o.req_id===orderNum;})) { skipped++; continue; }
+        var getVal = function(idx) {
+          if (!row[idx] && row[idx] !== 0) return "";
+          var v = String(row[idx]).trim();
+          if (v.match(/^\d{4}-\d{2}-\d{2}/)) { var p=v.split("-"); return p[2].substring(0,2)+"."+p[1]+"."+p[0]; }
+          return v;
+        };
+        var incoRaw = getVal(5);
+        var o = { id: ordId++, order_id: "ZED" + orderNum, client: clientName, route: (incoRaw.split(" ").slice(1).join(" ")||"Китай") + " → Україна", req_id: orderNum, date: getVal(4), incoterms: incoRaw.split(" ")[0]||"", booking: "", carrier: getVal(3), container: getVal(26)||"", cutoff: getVal(6), route_full: "", etd: getVal(8), eta: getVal(10), bol: "", cargo_status: "Очікує завантаження", decl: "", customs_status: "TBD", customs_date: "", resort: "Не потрібна", resort_addr: "", resort_comment: "", logist_ua: getVal(2), transport_ua: "", delivery_status: "Очікує", delivery_date: getVal(13), invoice_sum: parseFloat((getVal(15)||"").replace(/[^0-9.]/g,""))||0, payment_status: "Очікує від фін відділу", payment_date: "", docs: "", notes: getVal(16)+" кор / "+getVal(17)+" кг / "+getVal(18)+" CBM" };
+        db.orders.push(o); imported++;
+      }
+      save();
+      db.orders.forEach(function(o){ queueSync("orders", o); });
+      (db.clients||[]).forEach(function(c){ queueSync("clients", c); });
+      render();
+      alert("Імпортовано: " + imported + " ордерів. Пропущено: " + skipped);
+    } catch(err) { alert("Помилка: " + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
 }
 function clearAllData() {
   if (!confirm("Видалити ВСІ дані?")) return;
