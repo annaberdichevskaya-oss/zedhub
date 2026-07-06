@@ -528,7 +528,7 @@ function renderRequests() {
 
   html += "<div class='table-wrap'><table><thead><tr>"
     + "<th>№ ЗАПИТУ</th><th>ДАТА</th><th class='col-client'>КЛІЄНТ</th><th class='col-route'>МАРШРУТ / ТИП</th>"
-    + "<th>ВАНТАЖ</th><th class='col-sum'>НАЦІНКА $</th><th class='col-status'>СТАТУС</th>"
+    + "<th>ВАНТАЖ</th><th>ГОТОВНІСТЬ</th><th class='col-sum'>НАЦІНКА $</th><th class='col-status'>СТАТУС</th>"
     + "<th>МЕНЕДЖЕР</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
@@ -539,6 +539,7 @@ function renderRequests() {
       + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + escQ(r.client) + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(r.contact||"") + "</div></td>"
       + "<td class='col-route'><div style='font-size:12px'>" + escQ(r.route) + "</div><div style='font-size:10px'><span class='tag'>" + escQ(r.type||"") + "</span></div></td>"
       + "<td><div style='font-size:12px'>" + escQ(r.cargo||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(r.weight||"") + "</div></td>"
+      + "<td style='font-size:11px;color:#0e7490'>" + escQ(fmtDate(r.ready_date)||"—") + "</td>"
       + "<td class='col-sum' style='font-weight:600;font-size:12px;color:#16a34a'>$ " + ((r.sum_brutto||0)-(r.sum_netto||0)).toLocaleString("uk-UA") + "</td>"
       + "<td class='col-status'>" + reqPill(r.status) + "</td>"
       + "<td><select style='font-size:11px;padding:3px 5px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' onchange='updateReqManager(" + r.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((r.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select></td>"
