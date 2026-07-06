@@ -869,7 +869,8 @@ function showOrderModal(o) {
     + "<div class='field'><label>ORDER ID *</label><input id='of-oid' value='" + escQ(isEdit ? o.order_id : genOrderId()) + "'></div>"
     + "<div class='field'><label>ДАТА ОРДЕРУ</label>" + dateInput("of-date", isEdit ? (o.date||"") : new Date().toLocaleDateString("uk-UA")) + "</div>"
     + "<div class='field'><label>КЛІЄНТ</label><select id='of-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&o.client===c.name)?" selected":"") + ">" + escQ(c.name) + "</option>";}).join("") + "</select></div>"
-    + "<div class='field'><label>№ ЗАПИТУ</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
+    + "<div class='field'><label>МАРШРУТ відпр → приб</label><input id='of-rfull' value='" + escQ(isEdit ? (o.route_full||o.route||"") : "") + "' placeholder='Shanghai → Київ'></div>"
+    + "<div class='field'><label>№ ЗАПИТУ (якщо є)</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
     + "</div>"
 
     + "<div class='section-title'>Букінг та перевезення</div>"
@@ -879,7 +880,6 @@ function showOrderModal(o) {
     + "<div class='field'><label>КОНТЕЙНЕР №</label><input id='of-cont' value='" + escQ(isEdit ? (o.container||"") : "") + "'></div>"
     + "<div class='field'><label>ДАТА ГОТОВНОСТІ ВАНТАЖУ</label>" + dateInput("of-ready", isEdit ? (o.ready_date||"") : "") + "</div>"
     + "<div class='field'><label>CUT-OFF</label>" + dateInput("of-cut", isEdit ? (o.cutoff||"") : "") + "</div>"
-    + "<div class='field'><label>МАРШРУТ відпр → приб</label><input id='of-rfull' value='" + escQ(isEdit ? (o.route_full||"") : "") + "'></div>"
     + "<div class='field'><label>ETD</label>" + dateInput("of-etd", isEdit ? (o.etd||"") : "") + "</div>"
     + "<div class='field'><label>ETA</label>" + dateInput("of-eta", isEdit ? (o.eta||"") : "") + "</div>"
     + "<div class='field'><label>КОНОСАМЕНТ</label><input id='of-bol' value='" + escQ(isEdit ? (o.bol||"") : "") + "'></div>"
