@@ -180,7 +180,7 @@ var DELIVERY_STATUSES = ["Очікує","Транспорт призначено
 var PAYMENT_STATUSES = ["Очікує від фін відділу","Виставлено","Оплачено","Прострочено","TBD"];
 var BOOKING_STATUSES = ["Очікує букінг","Отримано","Підтверджено"];
 var RESORT_STATUSES = ["Не потрібна","В процесі","Завершено","TBD"];
-var TRANSPORT_TYPES = ["Авто","Море","Авіа","Комбіноване"];
+var TRANSPORT_TYPES = ["Авто","Море","Авіа","Мультимодальне"];
 
 function statusPill(status, map) {
   var cls = (map || {})[status] || "p-wait";
@@ -1286,12 +1286,11 @@ var ZED_SUPPORT_EMAIL = "zed.support@ekol.com.ua";
 function sendToLogist(reqId) {
   var r = db.requests.find(function(x){return x.id===reqId;});
   if (!r) return;
-  var subj = encodeURIComponent("Запит на прорахунок № " + (r.req_num||""));
+  var subj = encodeURIComponent("запит ставки_" + (r.client||"") + "_" + (r.route||"") + "_" + (r.weight||""));
   var lines = [
-    "Прошу прорахувати логістику по запиту:",
+    "Вітаю, прошу надати ставку:",
     "",
     "№ Запиту: " + (r.req_num||"—"),
-    "Дата: " + (r.date||"—"),
     "Клієнт: " + (r.client||"—"),
     "Контакт: " + (r.contact||"—"),
     "Маршрут: " + (r.route||"—"),
