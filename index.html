@@ -829,7 +829,7 @@ function createOrder(reqId) {
     resort: "TBD", resort_addr: "", resort_comment: "",
     logist_ua: "", transport_ua: "", delivery_status: "TBD", delivery_date: "",
     invoice_sum: (r.sum_brutto||0)-(r.sum_netto||0), sum_netto: r.sum_netto||0, sum_brutto: r.sum_brutto||0, payment_status: "TBD", payment_date: "",
-    docs: r.docs||"", notes: r.comment||""
+    docs: r.docs||"", notes: r.comment||"", manager: r.manager||"—", logist: "—"
   };
   db.orders.unshift(o);
   saveOne("orders", o);
