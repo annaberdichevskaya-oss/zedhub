@@ -537,7 +537,7 @@ function renderRequests() {
     + "</div>";
 
   html += "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук по клієнту, маршруту...' value='" + escQ(reqSearch) + "' oninput='reqSearch=this.value;renderRequests()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук по клієнту, маршруту...' value='" + escQ(reqSearch) + "' id='search-req' oninput='reqSearch=this.value;renderRequests();refocus(&quot;search-req&quot;)'>"
     + "<select class='filter-sel' onchange='reqFilter=this.value;renderRequests()'>"
     + "<option value=''>Всі статуси</option>"
     + REQ_STATUSES.map(function(s){return "<option value='" + s + "'" + (reqFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
@@ -763,7 +763,7 @@ function renderOrders() {
 
   var selCount = Object.keys(_selectedOrders).length;
   html += "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + escQ(ordSearch) + "' oninput='ordSearch=this.value;renderOrders()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук по ORDER ID, клієнту, маршруту...' value='" + escQ(ordSearch) + "' id='search-ord' oninput='ordSearch=this.value;renderOrders();refocus(&quot;search-ord&quot;)'>"
     + (function(){
         var cnt = ordManagerSel.length + ordLogistSel.length;
         var btn = "<div style='position:relative;display:inline-block;z-index:120'>"
@@ -1234,6 +1234,11 @@ function deleteOrder(id) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+function refocus(id) {
+  var el = document.getElementById(id);
+  if (el) { el.focus(); var v = el.value; el.value = ""; el.value = v; }
+}
+
 function gv(id) { var e=document.getElementById(id); return e ? e.value : ""; }
 function escQ(s) {
   return String(s||"")
@@ -1407,7 +1412,7 @@ function renderClients() {
     return !q || c.name.toLowerCase().indexOf(q) >= 0 || (c.contact||"").toLowerCase().indexOf(q) >= 0 || (c.emails||[]).join(" ").toLowerCase().indexOf(q) >= 0;
   });
   filtered.sort(function(a,b){ return (a.name||"").localeCompare(b.name||"", "uk"); });
-  var html = "<div class='toolbar'><input class='search-box' placeholder='Пошук клієнта...' value='" + escQ(cliSearch) + "' oninput='cliSearch=this.value;renderClients()'><button class='btn btn-yellow' onclick='openAddClient()'>+ Додати клієнта</button></div>";
+  var html = "<div class='toolbar'><input class='search-box' placeholder='Пошук клієнта...' value='" + escQ(cliSearch) + "' id='search-cli' oninput='cliSearch=this.value;renderClients();refocus(&quot;search-cli&quot;)'><button class='btn btn-yellow' onclick='openAddClient()'>+ Додати клієнта</button></div>";
   if (!filtered.length) {
     html += "<div style='text-align:center;padding:60px;color:#9ca3af'>Додайте першого клієнта</div>";
     document.getElementById("main-content").innerHTML = html;
@@ -1626,7 +1631,7 @@ function renderReference() {
     return !q || (x.title||"").toLowerCase().indexOf(q) >= 0 || (x.text||"").toLowerCase().indexOf(q) >= 0;
   });
   var html = "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук у довіднику...' value='" + escQ(refSearch) + "' oninput='refSearch=this.value;renderReference()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук у довіднику...' value='" + escQ(refSearch) + "' id='search-ref' oninput='refSearch=this.value;renderReference();refocus(&quot;search-ref&quot;)'>"
     + "<button class='btn btn-yellow' onclick='openAddRef()'>+ Додати запис</button>"
     + "</div>";
   if (!filtered.length) {
@@ -1747,7 +1752,7 @@ function renderTasker() {
     + "</div>";
 
   html += "<div class='toolbar'>"
-    + "<input class='search-box' placeholder='🔍 Пошук задачі...' value='" + escQ(taskSearch) + "' oninput='taskSearch=this.value;renderTasker()'>"
+    + "<input class='search-box' placeholder='🔍 Пошук задачі...' value='" + escQ(taskSearch) + "' id='search-task' oninput='taskSearch=this.value;renderTasker();refocus(&quot;search-task&quot;)'>"
     + "<select class='filter-sel' onchange='taskAssigneeFilter=this.value;renderTasker()'>"
     + "<option value=''>👤 Всі виконавці</option>"
     + ALL_PEOPLE.map(function(p){return "<option value='" + p + "'" + (taskAssigneeFilter===p?" selected":"") + ">" + p + "</option>";}).join("")
