@@ -156,6 +156,9 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   <button class="tab-btn" id="tab-ctrl" onclick="switchTab('control')">
     📊 Контроль <span class="tab-count" id="cnt-ctrl">0</span>
   </button>
+  <button class="tab-btn" id="tab-transit" onclick="switchTab('transit')">
+    ⏳ Транзит <span class="tab-count" id="cnt-transit">0</span>
+  </button>
   <button class="tab-btn" id="tab-ref" onclick="switchTab('reference')">
     📚 Довідник <span class="tab-count" id="cnt-ref">0</span>
   </button>
@@ -428,6 +431,16 @@ function updateCounts() {
       ctrlEl.className = "tab-count" + (n > 0 ? " orange" : "");
     } catch(e) {}
   }
+  var transitEl = document.getElementById("cnt-transit");
+  if (transitEl) {
+    try {
+      var tCount = (db.orders||[]).filter(function(o){
+        var d = daysUntil(o.eta);
+        return d !== null && d >= -3 && d <= 14 && o.cargo_status !== "Прибув" && o.cargo_status !== "Розвантажено" && o.delivery_status !== "Доставлено";
+      }).length;
+      transitEl.textContent = tCount;
+    } catch(e) {}
+  }
   var refEl = document.getElementById("cnt-ref");
   if (refEl) refEl.textContent = (db.references||[]).length;
   var taskEl = document.getElementById("cnt-task");
@@ -475,6 +488,7 @@ var ordDateTo = "";
 var ordManagerSel = [];
 var ordLogistSel = [];
 var ordExecOpen = false;
+var ordCargoFilter = "";
 var ordView = (function(){ try { return localStorage.getItem("zedhub_ordview") || "compact"; } catch(e){ return "compact"; } })();
 var _expandedOrders = {};
 
@@ -489,7 +503,6 @@ function toggleExpandOrder(id) {
   else _expandedOrders[id] = true;
   renderOrders();
 }
-var ordCargoFilter = "";
 
 function switchTab(tab) {
   currentTab = tab;
@@ -498,6 +511,7 @@ function switchTab(tab) {
   document.getElementById("tab-cli").classList.toggle("active", tab === "clients");
   document.getElementById("tab-task").classList.toggle("active", tab === "tasker");
   document.getElementById("tab-ctrl").classList.toggle("active", tab === "control");
+  document.getElementById("tab-transit").classList.toggle("active", tab === "transit");
   document.getElementById("tab-ref").classList.toggle("active", tab === "reference");
   render();
 }
@@ -508,6 +522,7 @@ function render() {
   else if (currentTab === "clients") renderClients();
   else if (currentTab === "tasker") renderTasker();
   else if (currentTab === "control") renderControl();
+  else if (currentTab === "transit") renderTransit();
   else renderReference();
 }
 
@@ -582,6 +597,7 @@ function renderRequests() {
   html += "</tbody></table></div>";
   document.getElementById("main-content").innerHTML = html;
 }
+
 
 
 // ── КОМПАКТНИЙ ВИГЛЯД ОРДЕРІВ ────────────────────────────────────
@@ -1619,6 +1635,127 @@ function renderControl() {
   }
 
   document.getElementById("main-content").innerHTML = html;
+}
+
+// ── ТРАНЗИТ (контейнери з ETA у межах 2 тижнів) ──────────────────
+function daysUntil(dateStr) {
+  var t = parseDateVal(dateStr);
+  if (t === null) return null;
+  var today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((t - today.getTime()) / 86400000);
+}
+
+function etaLabel(days) {
+  if (days === null) return "—";
+  if (days < 0) return "прострочено " + (-days) + " дн";
+  if (days === 0) return "сьогодні";
+  return "за " + days + " дн";
+}
+
+function resortPillTransit(s) {
+  var m = {"Не потрібна":"p-calc","В процесі":"p-wait","Завершено":"p-paid","TBD":"p-reject"};
+  return statusPill(s, m);
+}
+
+function nearBorderOrCustoms(status) {
+  if (!status) return false;
+  var s = status.toLowerCase();
+  return s.indexOf("кордон") >= 0 || s.indexOf("митниц") >= 0;
+}
+
+function renderTransit() {
+  var list = (db.orders||[]).filter(function(o) {
+    var d = daysUntil(o.eta);
+    if (d === null) return false;
+    if (d < -3 || d > 14) return false;
+    if (o.cargo_status === "Прибув" || o.cargo_status === "Розвантажено") return false;
+    if (o.delivery_status === "Доставлено") return false;
+    return true;
+  });
+  list.sort(function(a,b){ return daysUntil(a.eta) - daysUntil(b.eta); });
+
+  var resortDone = list.filter(function(o){return o.resort==="Завершено";}).length;
+  var resortProgress = list.filter(function(o){return o.resort==="В процесі";}).length;
+  var resortTbd = list.filter(function(o){return !o.resort || o.resort==="TBD";}).length;
+
+  var html = "<div class='stats-bar stats-3'>"
+    + "<div class='stat-card'><div class='stat-val'>" + list.length + "</div><div class='stat-label'>КОНТЕЙНЕРІВ У ВІКНІ 2 ТИЖНІ</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>" + resortProgress + "</div><div class='stat-label'>ПЕРЕТАРКА В ПРОЦЕСІ</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>" + resortDone + "</div><div class='stat-label'>ПЕРЕТАРКА ЗАВЕРШЕНА</div></div>"
+    + "</div>";
+
+  html += "<div class='toolbar' style='margin-bottom:6px'>"
+    + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA від -3 до +14 днів від сьогодні, ще не вивантажені/не доставлені. Клік по рядку відкриває ордер. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<button class='btn btn-yellow' onclick='openAddTransit()'>+ Додати контейнер</button>"
+    + "</div>";
+
+  if (!list.length) {
+    html += "<div class='empty-state'><div class='empty-icon'>⏳</div><div class='empty-text'>Немає контейнерів у цьому вікні часу</div></div>";
+    document.getElementById("main-content").innerHTML = html;
+    return;
+  }
+
+  html += "<div class='table-wrap'><table class='no-sticky'><thead><tr>"
+    + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ</th><th>КОНТЕЙНЕР</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th>"
+    + "</tr></thead><tbody>";
+
+  list.forEach(function(o) {
+    var d = daysUntil(o.eta);
+    var etaColor = d < 0 ? "#dc2626" : (d <= 3 ? "#d97706" : "#374151");
+    html += "<tr style='cursor:pointer' onclick='openEditOrder(" + o.id + ")'>"
+      + "<td>" + (nearBorderOrCustoms(o.ub_status) ? "<span title='Наближається до кордону/митниці' style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:5px'></span>" : "") + "<span class='order-id'>" + escQ(o.order_id) + "</span></td>"
+      + "<td class='col-client'>" + escQ(o.client||"") + "</td>"
+      + "<td style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + "</td>"
+      + "<td style='font-size:12px;font-weight:600;color:" + etaColor + "'>" + escQ(fmtDate(o.eta)) + " (" + etaLabel(d) + ")</td>"
+      + "<td style='max-width:220px'>" + (o.ub_status ? "<div style='font-size:12px;color:#374151'>" + escQ(o.ub_status) + "</div>" : "") + (o.load_date_pl_ua ? "<div style='font-size:10px;color:#0e7490'>📦 завант. PL/UA: " + escQ(o.load_date_pl_ua) + "</div>" : "") + (o.truck_info ? "<div style='font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>🚛 " + escQ(o.truck_info) + "</div>" : (!o.ub_status && !o.load_date_pl_ua ? "<span style='color:#d1d5db'>—</span>" : "")) + "</td>"
+      + "<td>" + resortPillTransit(o.resort||"TBD") + "</td>"
+      + "<td style='font-size:12px'>" + escQ(o.manager&&o.manager!=="—"?o.manager:"—") + "</td>"
+      + "</tr>";
+  });
+
+  html += "</tbody></table></div>";
+  document.getElementById("main-content").innerHTML = html;
+}
+
+
+function openAddTransit() { showTransitAddModal(); }
+
+function showTransitAddModal() {
+  var html = "<div class='modal-bg' id='transit-modal'><div class='modal'>"
+    + "<div class='modal-title'>➕ Додати контейнер вручну</div>"
+    + "<div class='form-grid'>"
+    + "<div class='field'><label>КЛІЄНТ *</label><input id='tt-client' placeholder='ТОВ «Гарні речі»'></div>"
+    + "<div class='field'><label>КОНТЕЙНЕР *</label><input id='tt-container' placeholder='ABCU1234567'></div>"
+    + "<div class='field'><label>ETA</label>" + dateInput("tt-eta", "") + "</div>"
+    + "<div class='field'><label>№ ЗАПИТУ / ТМС (необов'язково)</label><input id='tt-req'></div>"
+    + "</div>"
+    + "<div class='form-grid full'>"
+    + "<div class='field'><label>СТАТУС (текстом)</label><input id='tt-status' placeholder='напр. в дорозі, 50км до кордону'></div>"
+    + "<div class='field'><label>АВТО / ВОДІЙ</label><input id='tt-auto' placeholder='номер авто, водій, телефон'></div>"
+    + "</div>"
+    + "<div class='modal-btns'>"
+    + "<button class='btn btn-gray' onclick='closeModal()'>Скасувати</button>"
+    + "<button class='btn btn-yellow' onclick='saveTransitEntry()'>Зберегти</button>"
+    + "</div></div></div>";
+  document.getElementById("modal-area").innerHTML = html;
+}
+
+function saveTransitEntry() {
+  var client = gv("tt-client").trim();
+  var container = gv("tt-container").trim();
+  if (!client || !container) { alert("Введіть клієнта і контейнер"); return; }
+  var rec = {
+    id: nextId(db.orders), order_id: genOrderId(), client: client, container: container,
+    route: "", route_full: "", req_id: gv("tt-req"), date: new Date().toLocaleDateString("uk-UA"),
+    eta: fromISODate(gv("tt-eta")), ub_status: gv("tt-status"), truck_info: gv("tt-auto"),
+    cargo_status: "TBD", customs_pl_status: "TBD", customs_status: "TBD", resort: "TBD",
+    delivery_status: "TBD", payment_status: "TBD", manager: "—", logist: "—",
+    sum_netto: 0, sum_brutto: 0, notes: "Додано вручну через Транзит"
+  };
+  db.orders.unshift(rec);
+  saveOne("orders", rec);
+  closeModal();
+  render();
 }
 
 // ── REFERENCE (Довідник) ─────────────────────────────────────────
