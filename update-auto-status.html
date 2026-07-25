@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Оновлення авто/статусу (разово)</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:760px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:19px}h1 span{color:#f59e0b}
+.btn{border:none;border-radius:8px;padding:12px 22px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+#log{font-family:monospace;font-size:12px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:14px;max-height:340px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:14px}
+table{width:100%;border-collapse:collapse;font-size:12px;margin:14px 0}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #f3f4f6;vertical-align:top}
+th{background:#f9fafb;font-size:10px;color:#6b7280}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🚚 ZED <span>HUB</span> — оновлення даних авто/статусу (7 контейнерів)</h1>
+  <p style="font-size:13px;color:#6b7280">Оновлює поля truck_info та ub_status в існуючих ордерах за номером контейнера. Нових записів НЕ створює.</p>
+  <table>
+    <tr><th>Контейнер</th><th>Авто/водій</th><th>Статус (UB)</th></tr>
+    <tr><td style='font-family:monospace'>TGHU6346174</td><td>AC8051EH/AC4190XO, водій Рутік Роман 0987799650, ЯГОДИН, Авто МАКАРТРАНС, заявку на Супрунюк Олену Маркіянівну</td><td>в черзі, 11км до кордону</td></tr><tr><td style='font-family:monospace'>UETU7232308</td><td>AC3817BX/AC4694XP, Трофімук Олександр, 0689475257</td><td>завантажений 22.07, чекаємо на Т1 та документи</td></tr><tr><td style='font-family:monospace'>ONEU0551904</td><td>ВС1046РХ/ВС5296XG, Винницький Назар, +380977865132</td><td>на завантаженні з 22.07 обід, чекає поки перевантажать</td></tr><tr><td style='font-family:monospace'>TXGU7290548</td><td>АМ 7512 ВЕ / AM 4536 XT, Лихунець Вячеслав Олександрович, +380677543526</td><td>—</td></tr><tr><td style='font-family:monospace'>ECMU8172195</td><td>контейнеровоз</td><td>—</td></tr><tr><td style='font-family:monospace'>CMAU8413833</td><td>контейнеровоз</td><td>—</td></tr><tr><td style='font-family:monospace'>CMAU6137654</td><td>контейнеровоз</td><td>—</td></tr>
+  </table>
+  <div class="warn">⚠️ Перед оновленням натисни <b>💾 Бекап</b> у ZED Hub.</div>
+  <button class="btn btn-yellow" id="run-btn" onclick="runUpdate()">Оновити авто/статус</button>
+  <div id="log"></div>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var UPDATES = {"TGHU6346174": {"truck_info": "AC8051EH/AC4190XO, водій Рутік Роман 0987799650, ЯГОДИН, Авто МАКАРТРАНС, заявку на Супрунюк Олену Маркіянівну", "ub_status": "в черзі, 11км до кордону"}, "UETU7232308": {"truck_info": "AC3817BX/AC4694XP, Трофімук Олександр, 0689475257", "ub_status": "завантажений 22.07, чекаємо на Т1 та документи"}, "ONEU0551904": {"truck_info": "ВС1046РХ/ВС5296XG, Винницький Назар, +380977865132", "ub_status": "на завантаженні з 22.07 обід, чекає поки перевантажать"}, "TXGU7290548": {"truck_info": "АМ 7512 ВЕ / AM 4536 XT, Лихунець Вячеслав Олександрович, +380677543526", "ub_status": ""}, "ECMU8172195": {"truck_info": "контейнеровоз", "ub_status": ""}, "CMAU8413833": {"truck_info": "контейнеровоз", "ub_status": ""}, "CMAU6137654": {"truck_info": "контейнеровоз", "ub_status": ""}};
+
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};}
+function log(msg){var el=document.getElementById("log");el.style.display="block";el.textContent+=msg+"\n";el.scrollTop=el.scrollHeight;}
+function norm(s){return String(s||"").trim().toUpperCase();}
+
+async function runUpdate(){
+  document.getElementById("run-btn").disabled=true;
+  log("Читаю ордери з Supabase...");
+  var res = await fetch(SUPA_BASE+"/orders?select=id,data&limit=10000",{headers:headers()});
+  var rows = await res.json();
+  var orders = Array.isArray(rows)?rows.map(function(r){var d=r.data||{};d.id=r.id;return d;}):[];
+  log("В базі: "+orders.length+" ордерів.\n");
+
+  var byContainer={};
+  orders.forEach(function(o){ if(o.container) byContainer[norm(o.container)] = o; });
+
+  var updated=0, notFound=[];
+  var keys = Object.keys(UPDATES);
+  for (var i=0;i<keys.length;i++){
+    var cont = keys[i], upd = UPDATES[cont];
+    var o = byContainer[norm(cont)];
+    if (!o) { notFound.push(cont); log("✗ "+cont+" — НЕ ЗНАЙДЕНО в базі"); continue; }
+    o.truck_info = upd.truck_info;
+    o.ub_status = upd.ub_status;
+    o._v = (o._v||0)+1;
+    try {
+      var r = await fetch(SUPA_BASE+"/orders", {method:"POST", headers:headers(), body:JSON.stringify({id:o.id, data:o, updated_at:new Date().toISOString()})});
+      if (r.ok) { updated++; log("✓ "+o.order_id+" ("+cont+"): "+upd.truck_info.substring(0,40)+"... | "+(upd.ub_status||"без статусу")); }
+      else { log("✗ "+o.order_id+" ("+cont+"): HTTP "+r.status); }
+    } catch(e){ log("✗ "+cont+": "+e.message); }
+  }
+  log("");
+  log("ГОТОВО ✅  Оновлено: "+updated+" | Не знайдено: "+notFound.length);
+  if (notFound.length) log("Не знайдені контейнери: "+notFound.join(", "));
+  log("Відкрий ZED Hub і онови сторінку (Ctrl+Shift+R).");
+}
+</script>
+</body>
+</html>
