@@ -1639,6 +1639,13 @@ function resortPillTransit(s) {
   return statusPill(s, m);
 }
 
+function extractSupplier(o) {
+  if (o.supplier) return o.supplier;
+  var notes = o.notes || "";
+  var m = notes.match(/Постачальник:\s*([^•]+)/);
+  return m ? m[1].trim() : "";
+}
+
 function nearBorderOrCustoms(status) {
   if (!status) return false;
   var s = status.toLowerCase();
@@ -1678,7 +1685,7 @@ function renderTransit() {
   }
 
   html += "<div class='table-wrap'><table class='no-sticky'><thead><tr>"
-    + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ</th><th>КОНТЕЙНЕР</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th>"
+    + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ</th><th>КОНТЕЙНЕР / ПОСТАЧАЛЬНИК</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th>"
     + "</tr></thead><tbody>";
 
   list.forEach(function(o) {
@@ -1687,7 +1694,7 @@ function renderTransit() {
     html += "<tr style='cursor:pointer' onclick='openEditOrder(" + o.id + ")'>"
       + "<td>" + (nearBorderOrCustoms(o.ub_status) ? "<span title='Наближається до кордону/митниці' style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:5px'></span>" : "") + "<span class='order-id'>" + escQ(o.order_id) + "</span></td>"
       + "<td class='col-client'>" + escQ(o.client||"") + "</td>"
-      + "<td style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + "</td>"
+      + "<td style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + (function(){var s=extractSupplier(o);return s?"<div style='font-family:-apple-system,sans-serif;font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px'>"+escQ(s)+"</div>":"";})() + "</td>"
       + "<td style='font-size:12px;font-weight:600;color:" + etaColor + "'>" + escQ(fmtDate(o.eta)) + " (" + etaLabel(d) + ")</td>"
       + "<td style='max-width:220px'>" + (o.ub_status ? "<div style='font-size:12px;color:#374151'>" + escQ(o.ub_status) + "</div>" : "") + (o.load_date_pl_ua ? "<div style='font-size:10px;color:#0e7490'>📦 завант. PL/UA: " + escQ(o.load_date_pl_ua) + "</div>" : "") + (o.truck_info ? "<div style='font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>🚛 " + escQ(o.truck_info) + "</div>" : (!o.ub_status && !o.load_date_pl_ua ? "<span style='color:#d1d5db'>—</span>" : "")) + "</td>"
       + "<td>" + resortPillTransit(o.resort||"TBD") + "</td>"
@@ -1710,6 +1717,7 @@ function showTransitAddModal() {
     + "<div class='field'><label>КОНТЕЙНЕР *</label><input id='tt-container' placeholder='ABCU1234567'></div>"
     + "<div class='field'><label>ETA</label>" + dateInput("tt-eta", "") + "</div>"
     + "<div class='field'><label>№ ЗАПИТУ / ТМС (необов'язково)</label><input id='tt-req'></div>"
+    + "<div class='field'><label>ПОСТАЧАЛЬНИК</label><input id='tt-supplier'></div>"
     + "</div>"
     + "<div class='form-grid full'>"
     + "<div class='field'><label>СТАТУС (текстом)</label><input id='tt-status' placeholder='напр. в дорозі, 50км до кордону'></div>"
@@ -1729,7 +1737,7 @@ function saveTransitEntry() {
   var rec = {
     id: nextId(db.orders), order_id: genOrderId(), client: client, container: container,
     route: "", route_full: "", req_id: gv("tt-req"), date: new Date().toLocaleDateString("uk-UA"),
-    eta: fromISODate(gv("tt-eta")), ub_status: gv("tt-status"), truck_info: gv("tt-auto"),
+    eta: fromISODate(gv("tt-eta")), ub_status: gv("tt-status"), truck_info: gv("tt-auto"), supplier: gv("tt-supplier"),
     cargo_status: "TBD", customs_pl_status: "TBD", customs_status: "TBD", resort: "TBD",
     delivery_status: "TBD", payment_status: "TBD", manager: "—", logist: "—",
     sum_netto: 0, sum_brutto: 0, notes: "Додано вручну через Транзит"
