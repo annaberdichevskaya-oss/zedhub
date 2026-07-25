@@ -679,31 +679,30 @@ function delivClsC(s) {
 
 function buildCompactOrders(filtered) {
   var html = "<div>";
-  html += "<div style='display:flex;gap:14px;padding:4px 12px 8px;font-size:10px;color:#9ca3af;letter-spacing:.05em'>"
-    + "<span style='width:200px'>ОРДЕР / КЛІЄНТ</span>"
-    + "<span style='width:120px'>КОНТЕЙНЕР</span>"
+  html += "<div style='display:flex;gap:14px;padding:4px 12px 8px;font-size:10px;color:#9ca3af;letter-spacing:.05em;width:fit-content'>"
+    + "<span style='width:190px'>ОРДЕР / КЛІЄНТ</span>"
+    + "<span style='width:110px'>КОНТЕЙНЕР</span>"
     + "<span style='width:56px'>ETD/ETA</span>"
-    + "<span style='flex:1'>ВАНТАЖ</span>"
-    + "<span style='width:78px;text-align:right'>НАЦІНКА</span>"
-    + "<span style='width:150px'></span>"
+    + "<span style='width:100px'>ВАНТАЖ</span>"
+    + "<span style='width:80px;text-align:right'>НАЦІНКА</span>"
     + "</div>";
 
   filtered.forEach(function(o) {
     var markup = (o.sum_brutto||0) - (o.sum_netto||0);
     var expanded = !!_expandedOrders[o.id];
-    html += "<div style='background:#fff;border:1px solid " + (expanded ? "#f59e0b" : "#e5e7eb") + ";border-radius:8px;margin-bottom:6px'>";
+    html += "<div style='background:#fff;border:1px solid " + (expanded ? "#f59e0b" : "#e5e7eb") + ";border-radius:8px;margin-bottom:6px;width:fit-content;max-width:100%'>";
     html += "<div onclick='toggleExpandOrder(" + o.id + ")' style='display:flex;gap:14px;padding:9px 12px;align-items:center;cursor:pointer'>"
-      + "<div style='width:200px;min-width:0'>"
+      + "<div style='width:190px;min-width:0'>"
       + "<div class='order-id'>" + escQ(o.order_id) + "</div>"
       + "<div style='font-size:11px;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>" + escQ(o.client) + "</div>"
       + "</div>"
-      + "<div style='width:120px'>"
+      + "<div style='width:110px'>"
       + "<div style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + "</div>"
       + "<div style='font-size:10px;color:#9ca3af'>" + transportIcon(o.type) + " " + escQ(o.carrier||"") + "</div>"
       + "</div>"
       + "<div style='width:56px;font-size:11px'><div>" + escQ((fmtDate(o.etd)||"—").substring(0,5)) + "</div><div style='color:#0e7490'>" + escQ((fmtDate(o.eta)||"—").substring(0,5)) + "</div></div>"
-      + "<div style='flex:1;min-width:80px'>" + statusPill(o.cargo_status, {"Очікує завантаження":"p-calc","Завантажено":"p-new","В дорозі":"p-book","Прибув":"p-wait","Розвантажено":"p-clear","TBD":"p-reject"}) + "</div>"
-      + "<div style='width:78px;text-align:right'>"
+      + "<div style='width:100px'>" + statusPill(o.cargo_status, {"Очікує завантаження":"p-calc","Завантажено":"p-new","В дорозі":"p-book","Прибув":"p-wait","Розвантажено":"p-clear","TBD":"p-reject"}) + "</div>"
+      + "<div style='width:80px;text-align:right'>"
       + "<div style='font-size:12px;font-weight:600;color:#16a34a'>$ " + markup.toLocaleString("uk-UA") + "</div>"
       + "</div>"
       + "<div style='display:flex;gap:3px;align-items:center;border-left:1px solid #f3f4f6;padding-left:8px' onclick='event.stopPropagation()'>"
@@ -828,9 +827,9 @@ function renderOrders() {
   }
 
   var allChecked = filtered.length > 0 && filtered.every(function(o){ return _selectedOrders[o.id]; });
-  html += "<div class='table-wrap'><table><thead><tr>"
+  html += "<div class='table-wrap' style='width:fit-content;max-width:100%'><table style='width:auto'><thead><tr>"
     + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
-    + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
+    + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ</th>"
     + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>ГОТОВНІСТЬ</th><th>CUT-OFF</th>"
     + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
@@ -1674,7 +1673,7 @@ function renderTransit() {
     + "</div>";
 
   html += "<div class='toolbar' style='margin-bottom:6px'>"
-    + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA від -3 до +14 днів від сьогодні, ще не вивантажені/не доставлені. Клік по рядку відкриває ордер. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA від -3 до +14 днів від сьогодні, ще не вивантажені/не доставлені. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
     + "<button class='btn btn-gray' onclick='openUbImport()'>📥 Оновити з UB</button>"
     + "<button class='btn btn-yellow' onclick='openAddTransit()'>+ Додати контейнер</button>"
     + "</div>";
@@ -1686,19 +1685,20 @@ function renderTransit() {
   }
 
   html += "<div class='table-wrap'><table class='no-sticky'><thead><tr>"
-    + "<th class='col-client'>ОРДЕР / КЛІЄНТ</th><th>КОНТЕЙНЕР / ПОСТАЧАЛЬНИК</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th>"
+    + "<th class='col-client'>ОРДЕР / КЛІЄНТ</th><th>КОНТЕЙНЕР / ПОСТАЧАЛЬНИК</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   list.forEach(function(o) {
     var d = daysUntil(o.eta);
     var etaColor = d < 0 ? "#dc2626" : (d <= 3 ? "#d97706" : "#374151");
-    html += "<tr style='cursor:pointer' onclick='openEditOrder(" + o.id + ")'>"
+    html += "<tr>"
       + "<td class='col-client'>" + (nearBorderOrCustoms(o.ub_status) ? "<span title='Наближається до кордону/митниці' style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:5px'></span>" : "") + "<span class='order-id'>" + escQ(o.order_id) + "</span><div style='font-size:11px;color:#6b7280'>" + escQ(o.client||"") + "</div></td>"
       + "<td style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + (function(){var s=extractSupplier(o);return s?"<div style='font-family:-apple-system,sans-serif;font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px'>"+escQ(s)+"</div>":"";})() + "</td>"
       + "<td style='font-size:12px;font-weight:600;color:" + etaColor + "'>" + escQ(fmtDate(o.eta)) + " (" + etaLabel(d) + ")</td>"
       + "<td style='max-width:220px'>" + (o.ub_status ? "<div style='font-size:12px;color:#374151'>" + escQ(o.ub_status) + "</div>" : "") + (o.load_date_pl_ua ? "<div style='font-size:10px;color:#0e7490'>📦 завант. PL/UA: " + escQ(o.load_date_pl_ua) + "</div>" : "") + (o.truck_info ? "<div style='font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>🚛 " + escQ(o.truck_info) + "</div>" : (!o.ub_status && !o.load_date_pl_ua ? "<span style='color:#d1d5db'>—</span>" : "")) + "</td>"
       + "<td>" + resortPillTransit(o.resort||"TBD") + "</td>"
       + "<td style='font-size:12px'>" + escQ(o.manager&&o.manager!=="—"?o.manager:"—") + "</td>"
+      + "<td><button class='act-btn' title='Редагувати ордер' onclick='openEditOrder(" + o.id + ")'>✏️</button></td>"
       + "</tr>";
   });
 
