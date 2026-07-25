@@ -436,7 +436,7 @@ function updateCounts() {
     try {
       var tCount = (db.orders||[]).filter(function(o){
         var d = daysUntil(o.eta);
-        return d !== null && d >= -3 && d <= 14 && o.cargo_status !== "Прибув" && o.cargo_status !== "Розвантажено" && o.delivery_status !== "Доставлено";
+        return d !== null && d >= -30 && d <= 14 && o.cargo_status !== "Прибув" && o.cargo_status !== "Розвантажено" && o.delivery_status !== "Доставлено";
       }).length;
       transitEl.textContent = tCount;
     } catch(e) {}
@@ -1655,7 +1655,7 @@ function renderTransit() {
   var list = (db.orders||[]).filter(function(o) {
     var d = daysUntil(o.eta);
     if (d === null) return false;
-    if (d < -3 || d > 14) return false;
+    if (d < -30 || d > 14) return false;
     if (o.cargo_status === "Прибув" || o.cargo_status === "Розвантажено") return false;
     if (o.delivery_status === "Доставлено") return false;
     return true;
@@ -1673,7 +1673,7 @@ function renderTransit() {
     + "</div>";
 
   html += "<div class='toolbar' style='margin-bottom:6px'>"
-    + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA від -3 до +14 днів від сьогодні, ще не вивантажені/не доставлені. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA за останні 30 днів або наступні 14 днів, ще не вивантажені/не доставлені. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
     + "<button class='btn btn-gray' onclick='openUbImport()'>📥 Оновити з UB</button>"
     + "<button class='btn btn-yellow' onclick='openAddTransit()'>+ Додати контейнер</button>"
     + "</div>";
