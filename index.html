@@ -147,6 +147,9 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   <button class="tab-btn" id="tab-ord" onclick="switchTab('orders')">
     🔖 Ордери <span class="tab-count" id="cnt-ord">0</span>
   </button>
+  <button class="tab-btn" id="tab-transit" onclick="switchTab('transit')">
+    ⏳ Транзит <span class="tab-count" id="cnt-transit">0</span>
+  </button>
   <button class="tab-btn" id="tab-cli" onclick="switchTab('clients')">
     👥 Клієнти <span class="tab-count" id="cnt-cli">0</span>
   </button>
@@ -155,9 +158,6 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   </button>
   <button class="tab-btn" id="tab-ctrl" onclick="switchTab('control')">
     📊 Контроль <span class="tab-count" id="cnt-ctrl">0</span>
-  </button>
-  <button class="tab-btn" id="tab-transit" onclick="switchTab('transit')">
-    ⏳ Транзит <span class="tab-count" id="cnt-transit">0</span>
   </button>
   <button class="tab-btn" id="tab-ref" onclick="switchTab('reference')">
     📚 Довідник <span class="tab-count" id="cnt-ref">0</span>
@@ -1675,6 +1675,7 @@ function renderTransit() {
 
   html += "<div class='toolbar' style='margin-bottom:6px'>"
     + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA від -3 до +14 днів від сьогодні, ще не вивантажені/не доставлені. Клік по рядку відкриває ордер. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<button class='btn btn-gray' onclick='openUbImport()'>📥 Оновити з UB</button>"
     + "<button class='btn btn-yellow' onclick='openAddTransit()'>+ Додати контейнер</button>"
     + "</div>";
 
@@ -1685,15 +1686,14 @@ function renderTransit() {
   }
 
   html += "<div class='table-wrap'><table class='no-sticky'><thead><tr>"
-    + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ</th><th>КОНТЕЙНЕР / ПОСТАЧАЛЬНИК</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th>"
+    + "<th class='col-client'>ОРДЕР / КЛІЄНТ</th><th>КОНТЕЙНЕР / ПОСТАЧАЛЬНИК</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th>"
     + "</tr></thead><tbody>";
 
   list.forEach(function(o) {
     var d = daysUntil(o.eta);
     var etaColor = d < 0 ? "#dc2626" : (d <= 3 ? "#d97706" : "#374151");
     html += "<tr style='cursor:pointer' onclick='openEditOrder(" + o.id + ")'>"
-      + "<td>" + (nearBorderOrCustoms(o.ub_status) ? "<span title='Наближається до кордону/митниці' style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:5px'></span>" : "") + "<span class='order-id'>" + escQ(o.order_id) + "</span></td>"
-      + "<td class='col-client'>" + escQ(o.client||"") + "</td>"
+      + "<td class='col-client'>" + (nearBorderOrCustoms(o.ub_status) ? "<span title='Наближається до кордону/митниці' style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:5px'></span>" : "") + "<span class='order-id'>" + escQ(o.order_id) + "</span><div style='font-size:11px;color:#6b7280'>" + escQ(o.client||"") + "</div></td>"
       + "<td style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + (function(){var s=extractSupplier(o);return s?"<div style='font-family:-apple-system,sans-serif;font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px'>"+escQ(s)+"</div>":"";})() + "</td>"
       + "<td style='font-size:12px;font-weight:600;color:" + etaColor + "'>" + escQ(fmtDate(o.eta)) + " (" + etaLabel(d) + ")</td>"
       + "<td style='max-width:220px'>" + (o.ub_status ? "<div style='font-size:12px;color:#374151'>" + escQ(o.ub_status) + "</div>" : "") + (o.load_date_pl_ua ? "<div style='font-size:10px;color:#0e7490'>📦 завант. PL/UA: " + escQ(o.load_date_pl_ua) + "</div>" : "") + (o.truck_info ? "<div style='font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>🚛 " + escQ(o.truck_info) + "</div>" : (!o.ub_status && !o.load_date_pl_ua ? "<span style='color:#d1d5db'>—</span>" : "")) + "</td>"
@@ -1746,6 +1746,158 @@ function saveTransitEntry() {
   saveOne("orders", rec);
   closeModal();
   render();
+}
+
+// ── ІМПОРТ З UB (розбір Excel прямо в браузері) ───────────────────
+var UB_COLS = { tms:1, client:2, container:4, etaPlan:16, etaFact:17, loadDate:21, auto:26, status:28 };
+var UB_HEADER_CHECK = [
+  { idx: UB_COLS.tms, mustContain: "тмс", label: "№ТМС" },
+  { idx: UB_COLS.client, mustContain: "клієнт", label: "Клієнт" },
+  { idx: UB_COLS.container, mustContain: "контейнер", label: "Номер контейнера" },
+  { idx: UB_COLS.etaPlan, mustContain: "план", label: "ETA план" },
+  { idx: UB_COLS.etaFact, mustContain: "факт", label: "ETA факт" },
+  { idx: UB_COLS.auto, mustContain: "авто", label: "Данні по авто" },
+  { idx: UB_COLS.status, mustContain: "вивант", label: "Дата вивантаження" }
+];
+
+function openUbImport() {
+  var html = "<div class='modal-bg' id='ub-modal'><div class='modal' style='width:640px'>"
+    + "<div class='modal-title'>📥 Оновити Транзит з файлу UB</div>"
+    + "<p style='font-size:12px;color:#6b7280;margin-bottom:12px'>Обери аркуш «FCL» з файлу UB (.xlsx). Оновлює ЛИШЕ ETA, дату завантаження PL/UA, авто та статус в існуючих ордерах за номером контейнера — нових записів не створює, порожні поля не затирають наявні дані.</p>"
+    + "<input type='file' id='ub-file-inp' accept='.xlsx,.xls'>"
+    + "<div id='ub-log' style='font-family:monospace;font-size:11px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:12px;max-height:320px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:12px'></div>"
+    + "<div class='modal-btns'>"
+    + "<button class='btn btn-gray' onclick='closeModal()'>Закрити</button>"
+    + "<button class='btn btn-yellow' id='ub-run-btn' onclick='runUbImport()'>Обробити файл</button>"
+    + "</div></div></div>";
+  document.getElementById("modal-area").innerHTML = html;
+}
+
+function ubLog(msg) {
+  var el = document.getElementById("ub-log");
+  if (!el) return;
+  el.style.display = "block";
+  el.textContent += msg + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+function ubCellText(v) {
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) {
+    var d = v.getDate(), m = v.getMonth()+1, y = v.getFullYear();
+    return (d<10?"0":"")+d+"."+(m<10?"0":"")+m+"."+y;
+  }
+  return String(v).trim();
+}
+
+function findFclSheet(wb) {
+  for (var i = 0; i < wb.SheetNames.length; i++) {
+    if (wb.SheetNames[i].toLowerCase().replace(/\s/g,"").indexOf("fcl") >= 0) return wb.SheetNames[i];
+  }
+  return null;
+}
+
+function runUbImport() {
+  var fileInp = document.getElementById("ub-file-inp");
+  var file = fileInp && fileInp.files && fileInp.files[0];
+  if (!file) { alert("Обери файл"); return; }
+  document.getElementById("ub-run-btn").disabled = true;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: "array", cellDates: true });
+      var sheetName = findFclSheet(wb);
+      if (!sheetName) { ubLog("✗ Аркуш FCL не знайдено у файлі. Наявні аркуші: " + wb.SheetNames.join(", ")); return; }
+      ubLog("Аркуш знайдено: \"" + sheetName + "\"");
+      var ws = wb.Sheets[sheetName];
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false, cellDates: true });
+      if (!rows.length) { ubLog("✗ Аркуш порожній"); return; }
+
+      // Перевірка заголовків
+      var hdr = rows[0];
+      var badCols = [];
+      UB_HEADER_CHECK.forEach(function(chk) {
+        var val = ubCellText(hdr[chk.idx]).toLowerCase();
+        if (val.indexOf(chk.mustContain) < 0) badCols.push(chk.label + " (очікував \"" + chk.mustContain + "\", знайшов \"" + ubCellText(hdr[chk.idx]) + "\")");
+      });
+      if (badCols.length) {
+        ubLog("⚠️ СТРУКТУРА ФАЙЛУ ЗМІНИЛАСЬ — імпорт зупинено, щоб не записати неправильні дані.");
+        ubLog("Проблемні колонки:");
+        badCols.forEach(function(b){ ubLog("  • " + b); });
+        ubLog("Покажи цей файл Claude, щоб оновити парсер.");
+        document.getElementById("ub-run-btn").disabled = false;
+        return;
+      }
+      ubLog("Заголовки перевірено — структура файлу відповідає очікуваній.\n");
+
+      // Парсинг рядків
+      var parsed = {};
+      for (var i = 1; i < rows.length; i++) {
+        var r = rows[i];
+        if (!r) continue;
+        var container = ubCellText(r[UB_COLS.container]).toUpperCase();
+        if (!container) continue;
+        var etaPlan = ubCellText(r[UB_COLS.etaPlan]);
+        var etaFact = ubCellText(r[UB_COLS.etaFact]);
+        var eta = etaFact || etaPlan;
+        var loadDate = ubCellText(r[UB_COLS.loadDate]);
+        var auto = ubCellText(r[UB_COLS.auto]);
+        var status = ubCellText(r[UB_COLS.status]);
+        if (!eta && !loadDate && !auto && !status) continue;
+        var entry = {};
+        if (eta) entry.eta = eta;
+        if (loadDate) entry.load_date_pl_ua = loadDate;
+        if (auto) entry.truck_info = auto;
+        if (status) entry.ub_status = status;
+        parsed[container] = entry;
+      }
+      var contCount = Object.keys(parsed).length;
+      ubLog("Знайдено рядків з даними: " + contCount);
+      if (!contCount) { ubLog("Немає що оновлювати."); document.getElementById("ub-run-btn").disabled = false; return; }
+      ubLog("");
+      applyUbUpdates(parsed);
+    } catch (err) {
+      ubLog("✗ Помилка обробки файлу: " + err.message);
+      document.getElementById("ub-run-btn").disabled = false;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function applyUbUpdates(parsed) {
+  ubLog("Читаю ордери з Supabase...");
+  var res = await fetch(SUPA_BASE + "/orders?select=id,data&limit=10000", { headers: supaHeaders() });
+  var rows = await res.json();
+  var orders = Array.isArray(rows) ? rows.map(function(r){ var d=r.data||{}; d.id=r.id; return d; }) : [];
+  ubLog("В базі: " + orders.length + " ордерів.\n");
+
+  var byContainer = {};
+  orders.forEach(function(o){ if (o.container) byContainer[String(o.container).trim().toUpperCase()] = o; });
+
+  var updated = 0, unchanged = 0, notFound = [];
+  var keys = Object.keys(parsed);
+  for (var i = 0; i < keys.length; i++) {
+    var cont = keys[i], upd = parsed[cont];
+    var o = byContainer[cont];
+    if (!o) { notFound.push(cont); continue; }
+    var changes = [];
+    if (upd.eta && o.eta !== upd.eta) { changes.push("ETA:" + (o.eta||"—") + "→" + upd.eta); o.eta = upd.eta; }
+    if (upd.load_date_pl_ua && o.load_date_pl_ua !== upd.load_date_pl_ua) { changes.push("завант:" + upd.load_date_pl_ua); o.load_date_pl_ua = upd.load_date_pl_ua; }
+    if (upd.truck_info && o.truck_info !== upd.truck_info) { changes.push("авто оновлено"); o.truck_info = upd.truck_info; }
+    if (upd.ub_status && o.ub_status !== upd.ub_status) { changes.push("статус:" + upd.ub_status); o.ub_status = upd.ub_status; }
+    if (!changes.length) { unchanged++; continue; }
+    o._v = (o._v||0) + 1;
+    try {
+      var r = await fetch(SUPA_BASE + "/orders", { method: "POST", headers: supaHeaders(), body: JSON.stringify({ id: o.id, data: o, updated_at: new Date().toISOString() }) });
+      if (r.ok) { updated++; ubLog("✓ " + o.order_id + " (" + cont + "): " + changes.join(" | ")); }
+      else { ubLog("✗ " + o.order_id + " (" + cont + "): HTTP " + r.status); }
+    } catch (e) { ubLog("✗ " + cont + ": " + e.message); }
+  }
+  ubLog("");
+  ubLog("ГОТОВО ✅  Оновлено: " + updated + " | Без змін: " + unchanged + " | Не знайдено: " + notFound.length);
+  if (notFound.length) ubLog("Не знайдені контейнери (можливо, ще не імпортовані в ZED Hub): " + notFound.join(", "));
+  document.getElementById("ub-run-btn").disabled = false;
+  try { db = await cloudLoad(); render(); } catch(e) {}
 }
 
 // ── REFERENCE (Довідник) ─────────────────────────────────────────
