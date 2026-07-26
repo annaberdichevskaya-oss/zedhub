@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Прибрати з Транзиту</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:600px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:19px}h1 span{color:#f59e0b}
+.btn{border:none;border-radius:8px;padding:12px 22px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+#log{font-family:monospace;font-size:12px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:14px;max-height:300px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📦 ZED <span>HUB</span> — прибрати з Транзиту</h1>
+  <p style="font-size:13px;color:#6b7280">Позначає ZED0129 та ZED0047 статусом вантажу «Прибув» — вони зникнуть з вкладки Транзит (фільтр вже так влаштований), ордери НЕ видаляються.</p>
+  <button class="btn btn-yellow" id="run-btn" onclick="runUpdate()">Прибрати з Транзиту</button>
+  <div id="log"></div>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var TARGET_IDS = ["ZED0129", "ZED0047"];
+
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};}
+function log(msg){var el=document.getElementById("log");el.style.display="block";el.textContent+=msg+"\n";el.scrollTop=el.scrollHeight;}
+
+async function runUpdate(){
+  document.getElementById("run-btn").disabled=true;
+  log("Читаю ордери з Supabase...");
+  var res = await fetch(SUPA_BASE+"/orders?select=id,data&limit=10000",{headers:headers()});
+  var rows = await res.json();
+  var orders = Array.isArray(rows)?rows.map(function(r){var d=r.data||{};d.id=r.id;return d;}):[];
+  log("В базі: "+orders.length+" ордерів.\n");
+
+  var found=0, notFound=[];
+  for (var i=0;i<TARGET_IDS.length;i++){
+    var oid = TARGET_IDS[i];
+    var o = orders.find(function(x){return x.order_id===oid;});
+    if (!o) { notFound.push(oid); log("✗ "+oid+" — НЕ ЗНАЙДЕНО в базі"); continue; }
+    o.cargo_status = "Прибув";
+    o._v = (o._v||0)+1;
+    try {
+      var r = await fetch(SUPA_BASE+"/orders", {method:"POST", headers:headers(), body:JSON.stringify({id:o.id, data:o, updated_at:new Date().toISOString()})});
+      if (r.ok) { found++; log("✓ "+oid+" (контейнер: "+(o.container||"—")+") → статус вантажу: Прибув"); }
+      else { log("✗ "+oid+": HTTP "+r.status); }
+    } catch(e){ log("✗ "+oid+": "+e.message); }
+  }
+  log("");
+  log("ГОТОВО ✅  Оброблено: "+found+" | Не знайдено: "+notFound.length);
+  log("Відкрий ZED Hub, зайди у Транзит і онови сторінку (Ctrl+Shift+R) — ці два зникнуть зі списку.");
+}
+</script>
+</body>
+</html>
