@@ -1645,6 +1645,14 @@ function extractSupplier(o) {
   return m ? m[1].trim() : "";
 }
 
+function extractManagerDisplay(o) {
+  if (o.manager && o.manager !== "—") return { text: o.manager, raw: false };
+  var notes = o.notes || "";
+  var m = notes.match(/менеджер:\s*([^•]+)/i);
+  if (m) return { text: m[1].trim(), raw: true };
+  return { text: "—", raw: false };
+}
+
 function nearBorderOrCustoms(status) {
   if (!status) return false;
   var s = status.toLowerCase();
@@ -1697,7 +1705,7 @@ function renderTransit() {
       + "<td style='font-size:12px;font-weight:600;color:" + etaColor + "'>" + escQ(fmtDate(o.eta)) + "</td>"
       + "<td style='max-width:220px'>" + (o.ub_status ? "<div style='font-size:12px;color:#374151'>" + escQ(o.ub_status) + "</div>" : "") + (o.load_date_pl_ua ? "<div style='font-size:10px;color:#0e7490'>📦 завант. PL/UA: " + escQ(o.load_date_pl_ua) + "</div>" : "") + (o.truck_info ? "<div style='font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>🚛 " + escQ(o.truck_info) + "</div>" : (!o.ub_status && !o.load_date_pl_ua ? "<span style='color:#d1d5db'>—</span>" : "")) + "</td>"
       + "<td>" + resortPillTransit(o.resort||"TBD") + "</td>"
-      + "<td style='font-size:12px'>" + escQ(o.manager&&o.manager!=="—"?o.manager:"—") + "</td>"
+      + "<td style='font-size:12px'>" + (function(){var mg=extractManagerDisplay(o);return mg.raw ? "<span style='color:#9ca3af;font-style:italic' title='Взято з приміток, не підтверджено'>" + escQ(mg.text) + " ?</span>" : escQ(mg.text);})() + "</td>"
       + "<td><button class='act-btn' title='Редагувати ордер' onclick='openEditOrder(" + o.id + ")'>✏️</button></td>"
       + "</tr>";
   });
