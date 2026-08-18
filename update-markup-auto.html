@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Націнка авто + локальні</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:800px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600}
+.field input[type=file]{width:100%;font-size:13px}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+#log{font-family:monospace;font-size:11px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:14px;max-height:420px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:14px}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>💰 ZED <span>HUB</span> — Націнка авто + локальні (всі ордери)</h1>
+  <p>Для <b>кожного ордера з номером контейнера</b>, який зараз є в базі:<br>
+  1) <b>Націнка локальні</b> → завжди <b>150</b> $<br>
+  2) <b>Націнка авто</b> → якщо контейнер знайдено у файлі UB (аркуш FCL, колонки "Нетто авто/USD" і "Брутто авто/USD") — рахує різницю брутто−нетто. Якщо контейнера в UB немає — націнку авто не чіпає.</p>
+  <div class="field">
+    <label>ФАЙЛ UB.xlsx</label>
+    <input type="file" id="f-file" accept=".xlsx,.xls">
+  </div>
+  <div class="warn">⚠️ Перед запуском натисни <b>💾 Бекап</b> у ZED Hub.</div>
+  <button class="btn btn-yellow" id="run-btn" onclick="runUpdate()">Порахувати і оновити</button>
+  <div id="log"></div>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};}
+function log(msg){var el=document.getElementById("log");el.style.display="block";el.textContent+=msg+"\n";el.scrollTop=el.scrollHeight;}
+function norm(s){return String(s||"").trim().toUpperCase();}
+function num(v){ if(v===null||v===undefined||v==="") return null; var n=parseFloat(v); return isNaN(n)?null:n; }
+
+function runUpdate(){
+  var fileInp = document.getElementById("f-file");
+  var file = fileInp && fileInp.files && fileInp.files[0];
+  if (!file) { alert("Обери файл UB.xlsx"); return; }
+  document.getElementById("run-btn").disabled = true;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    processFile(e.target.result);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function processFile(arrayBuffer){
+  try {
+    var wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    var sheetName = null;
+    for (var s=0; s<wb.SheetNames.length; s++){
+      if (wb.SheetNames[s].toLowerCase().replace(/\s/g,"").indexOf("fcl")>=0){ sheetName = wb.SheetNames[s]; break; }
+    }
+    if (!sheetName) { log("✗ Аркуш FCL не знайдено. Наявні аркуші: "+wb.SheetNames.join(", ")); document.getElementById("run-btn").disabled=false; return; }
+    log("Аркуш знайдено: \"" + sheetName + "\"");
+    var ws = wb.Sheets[sheetName];
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false, cellDates: true });
+
+    // Перевірка заголовків AP(41) і AQ(42)
+    var hdr = rows[0];
+    var hdrAP = String(hdr[41]||"").toLowerCase();
+    var hdrAQ = String(hdr[42]||"").toLowerCase();
+    if (hdrAP.indexOf("нетто")<0 || hdrAP.indexOf("авто")<0 || hdrAQ.indexOf("брутто")<0 || hdrAQ.indexOf("авто")<0) {
+      log("⚠️ СТРУКТУРА ФАЙЛУ ЗМІНИЛАСЬ — очікував \"Нетто авто\" в колонці AP і \"Брутто авто\" в AQ.");
+      log("Знайшов: AP=\"" + (hdr[41]||"") + "\", AQ=\"" + (hdr[42]||"") + "\"");
+      log("Імпорт зупинено, щоб не записати неправильні дані. Покажи файл Claude.");
+      document.getElementById("run-btn").disabled = false;
+      return;
+    }
+    log("Заголовки перевірено (AP=Нетто авто, AQ=Брутто авто) — OK.\n");
+
+    // Побудова мапи контейнер -> {netto, brutto}
+    var ubMap = {};
+    for (var i=1; i<rows.length; i++){
+      var r = rows[i];
+      if (!r || !r[4]) continue;
+      var cont = norm(r[4]);
+      var netto = num(r[41]);
+      var brutto = num(r[42]);
+      if (netto===null && brutto===null) continue;
+      ubMap[cont] = { netto: netto, brutto: brutto };
+    }
+    log("У файлі UB знайдено контейнерів з даними по авто: " + Object.keys(ubMap).length + "\n");
+
+    log("Читаю ордери з Supabase...");
+    var res = await fetch(SUPA_BASE+"/orders?select=id,data&limit=10000",{headers:headers()});
+    var supaRows = await res.json();
+    var orders = Array.isArray(supaRows)?supaRows.map(function(r){var d=r.data||{};d.id=r.id;return d;}):[];
+    log("В базі: "+orders.length+" ордерів.\n");
+
+    var withContainer = orders.filter(function(o){ return o.container && String(o.container).trim(); });
+    log("З номером контейнера: " + withContainer.length + "\n");
+
+    var updated=0, autoCalculated=0, notInUB=[];
+    for (var j=0; j<withContainer.length; j++){
+      var o = withContainer[j];
+      var cont = norm(o.container);
+      var changes = [];
+
+      if (o.markup_local !== 150) { changes.push("нац.локальні:"+(o.markup_local||0)+"→150"); o.markup_local = 150; }
+
+      var ub = ubMap[cont];
+      if (ub && ub.netto!==null && ub.brutto!==null) {
+        var newAuto = Math.round((ub.brutto - ub.netto) * 100) / 100;
+        if (o.markup_auto !== newAuto) { changes.push("нац.авто:"+(o.markup_auto||0)+"→"+newAuto.toFixed(2)); o.markup_auto = newAuto; autoCalculated++; }
+      } else {
+        notInUB.push(o.container);
+      }
+
+      if (!changes.length) { continue; }
+      o._v = (o._v||0)+1;
+      try {
+        var r2 = await fetch(SUPA_BASE+"/orders", {method:"POST", headers:headers(), body:JSON.stringify({id:o.id, data:o, updated_at:new Date().toISOString()})});
+        if (r2.ok) { updated++; log("✓ "+o.order_id+" ("+o.container+"): "+changes.join(" | ")); }
+        else { log("✗ "+o.order_id+": HTTP "+r2.status); }
+      } catch(err){ log("✗ "+o.order_id+": "+err.message); }
+    }
+
+    log("");
+    log("ГОТОВО ✅  Оновлено ордерів: "+updated+" | З них націнка авто порахована: "+autoCalculated);
+    log("Контейнерів без даних по авто в UB (націнку авто не чіпав): "+notInUB.length);
+    if (notInUB.length) log("  "+notInUB.join(", "));
+    log("Відкрий ZED Hub і онови сторінку (Ctrl+Shift+R).");
+  } catch (err) {
+    log("✗ Помилка обробки файлу: " + err.message);
+  }
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
