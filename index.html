@@ -684,7 +684,7 @@ function buildCompactOrders(filtered) {
     + "<span style='width:190px'>ОРДЕР / КЛІЄНТ</span>"
     + "<span style='width:110px'>КОНТЕЙНЕР</span>"
     + "<span style='width:56px'>ETD/ETA</span>"
-    + "<span style='width:100px'>ВАНТАЖ</span>"
+    + "<span style='width:100px'>ДОСТАВКА</span>"
     + "<span style='width:80px;text-align:right'>НАЦІНКА</span>"
     + "</div>";
 
@@ -702,7 +702,7 @@ function buildCompactOrders(filtered) {
       + "<div style='font-size:10px;color:#9ca3af'>" + transportIcon(o.type) + " " + escQ(o.carrier||"") + "</div>"
       + "</div>"
       + "<div style='width:56px;font-size:11px'><div>" + escQ((fmtDate(o.etd)||"—").substring(0,5)) + "</div><div style='color:#0e7490'>" + escQ((fmtDate(o.eta)||"—").substring(0,5)) + "</div></div>"
-      + "<div style='width:100px'>" + statusPill(o.cargo_status, {"Очікує завантаження":"p-calc","Завантажено":"p-new","В дорозі":"p-book","Прибув":"p-wait","Розвантажено":"p-clear","TBD":"p-reject"}) + "</div>"
+      + "<div style='width:100px'>" + delivPill(o.delivery_status) + "</div>"
       + "<div style='width:80px;text-align:right'>"
       + "<div style='font-size:12px;font-weight:600;color:#16a34a'>$ " + markup.toLocaleString("uk-UA") + "</div>"
       + "</div>"
@@ -718,7 +718,7 @@ function buildCompactOrders(filtered) {
 
     if (expanded) {
       html += "<div style='border-top:1px solid #f3f4f6;padding:10px 12px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start'>"
-        + compactStatusSel("ВАНТАЖ", o.id, "updateCargoStatus", CARGO_STATUSES, o.cargo_status||"TBD", cargoCls)
+        + compactStatusSel("ДОСТАВКА", o.id, "updateDeliveryStatus", DELIVERY_STATUSES, o.delivery_status||"TBD", delivClsC)
         + "<div><div style='font-size:10px;color:#9ca3af;margin-bottom:2px'>БУКІНГ</div><div style='font-size:12px'>" + escQ(o.booking||"—") + "</div></div>"
         + "<div><div style='font-size:10px;color:#9ca3af;margin-bottom:2px'>CUT-OFF</div><div style='font-size:12px;color:#ef4444;font-weight:600'>" + escQ(fmtDate(o.cutoff)||"—") + "</div></div>"
         + "<div><div style='font-size:10px;color:#9ca3af;margin-bottom:2px'>ГОТОВНІСТЬ</div><div style='font-size:12px;color:#0e7490'>" + escQ(fmtDate(o.ready_date)||"—") + "</div></div>"
@@ -740,7 +740,7 @@ function renderOrders() {
     var matchSearch = !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route_full||o.route||"").toLowerCase().indexOf(q) >= 0 || (o.container||"").toLowerCase().indexOf(q) >= 0 || (o.booking||"").toLowerCase().indexOf(q) >= 0 || (o.carrier||"").toLowerCase().indexOf(q) >= 0;
     var matchManager = ordManagerSel.length===0 || ordManagerSel.indexOf(o.manager||"") >= 0;
     var matchLogist = ordLogistSel.length===0 || ordLogistSel.indexOf(o.logist||"") >= 0;
-    var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
+    var matchCargo = !ordCargoFilter || (o.delivery_status||"") === ordCargoFilter;
     var matchD = inDateRange(o.date, ordDateFrom, ordDateTo);
     return matchSearch && matchManager && matchLogist && matchCargo && matchD;
   });
@@ -798,8 +798,8 @@ function renderOrders() {
         return btn;
       })()
     + "<select class='filter-sel' onchange='ordCargoFilter=this.value;renderOrders()'>"
-    + "<option value=''>📦 Всі статуси вантажу</option>"
-    + CARGO_STATUSES.map(function(s){return "<option value='" + s + "'" + (ordCargoFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
+    + "<option value=''>🚚 Всі статуси доставки</option>"
+    + DELIVERY_STATUSES.map(function(s){return "<option value='" + s + "'" + (ordCargoFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select>"
     + "<select class='filter-sel' onchange='ordSort=this.value;renderOrders()'>"
     + "<option value='new'" + (ordSort==="new"?" selected":"") + ">↓ Новіші ордери</option>"
@@ -832,7 +832,7 @@ function renderOrders() {
     + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ</th>"
     + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>ГОТОВНІСТЬ</th><th>CUT-OFF</th>"
-    + "<th>ETD / ETA</th><th>ВАНТАЖ</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ETD / ETA</th><th>ДОСТАВКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
@@ -845,7 +845,7 @@ function renderOrders() {
       + "<td style='font-size:11px;color:#0e7490'>" + escQ(fmtDate(o.ready_date)||"—") + "</td>"
       + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + escQ(fmtDate(o.cutoff)||"—") + "</td>"
       + "<td><div style='font-size:11px'>" + escQ(fmtDate(o.etd)||"—") + "</div><div style='font-size:11px;color:#16a34a'>" + escQ(fmtDate(o.eta||"")) + "</div></td>"
-      + "<td>" + statusPill(o.cargo_status, {"Очікує завантаження":"p-calc","Завантажено":"p-new","В дорозі":"p-book","Прибув":"p-wait","Розвантажено":"p-clear","TBD":"p-reject"}) + "</td>"
+      + "<td>" + delivPill(o.delivery_status) + "</td>"
       + "<td><div style='display:flex;flex-direction:column;gap:3px'>"
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' title='Менеджер' onchange='updateOrdManager(" + o.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((o.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select>"
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #dbeafe;background:#f0f7ff;cursor:pointer' title='Логіст' onchange='updateOrdLogist(" + o.id + ",this.value)'>" + LOGISTS.map(function(l){return "<option" + ((o.logist||"—")===l?" selected":"") + ">" + l + "</option>";}).join("") + "</select>"
@@ -1355,7 +1355,7 @@ function exportOrdersExcel() {
     var matchSearch = !q || o.client.toLowerCase().indexOf(q) >= 0 || o.order_id.toLowerCase().indexOf(q) >= 0 || (o.route_full||o.route||"").toLowerCase().indexOf(q) >= 0 || (o.container||"").toLowerCase().indexOf(q) >= 0 || (o.booking||"").toLowerCase().indexOf(q) >= 0 || (o.carrier||"").toLowerCase().indexOf(q) >= 0;
     var matchManager = ordManagerSel.length===0 || ordManagerSel.indexOf(o.manager||"") >= 0;
     var matchLogist = ordLogistSel.length===0 || ordLogistSel.indexOf(o.logist||"") >= 0;
-    var matchCargo = !ordCargoFilter || (o.cargo_status||"") === ordCargoFilter;
+    var matchCargo = !ordCargoFilter || (o.delivery_status||"") === ordCargoFilter;
     var matchD = inDateRange(o.date, ordDateFrom, ordDateTo);
     return matchSearch && matchManager && matchLogist && matchCargo && matchD;
   }).map(function(o){
