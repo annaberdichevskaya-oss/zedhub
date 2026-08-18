@@ -133,6 +133,7 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
       <span id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block"></span>
       <span id="sync-text">Синхронізовано</span>
     </span>
+    <a class="hbtn" href="insurance-gen.html" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center">🛡 Страховка</a>
     <button class="hbtn" onclick="exportCurrentExcel()">📤 Excel</button>
     <button class="hbtn" onclick="exportBackup()">💾 Бекап</button>
     <input type="file" id="restore-inp" accept=".json" style="display:none" onchange="restoreBackup(this.files[0])">
@@ -688,7 +689,7 @@ function buildCompactOrders(filtered) {
     + "</div>";
 
   filtered.forEach(function(o) {
-    var markup = (o.sum_brutto||0) - (o.sum_netto||0);
+    var markup = ((o.sum_brutto||0) - (o.sum_netto||0)) + (o.markup_auto||0) + (o.markup_local||0);
     var expanded = !!_expandedOrders[o.id];
     html += "<div style='background:#fff;border:1px solid " + (expanded ? "#f59e0b" : "#e5e7eb") + ";border-radius:8px;margin-bottom:6px;width:fit-content;max-width:100%'>";
     html += "<div onclick='toggleExpandOrder(" + o.id + ")' style='display:flex;gap:14px;padding:9px 12px;align-items:center;cursor:pointer'>"
@@ -850,7 +851,7 @@ function renderOrders() {
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #dbeafe;background:#f0f7ff;cursor:pointer' title='Логіст' onchange='updateOrdLogist(" + o.id + ",this.value)'>" + LOGISTS.map(function(l){return "<option" + ((o.logist||"—")===l?" selected":"") + ">" + l + "</option>";}).join("") + "</select>"
       + "</div></td>"
       + "<td class='col-sum'>"
-      + "<div style='font-weight:600;font-size:12px;color:#16a34a'>$ " + ((o.sum_brutto||0)-(o.sum_netto||0)).toLocaleString("uk-UA") + "</div>"
+      + "<div style='font-weight:600;font-size:12px;color:#16a34a'>$ " + (((o.sum_brutto||0)-(o.sum_netto||0))+(o.markup_auto||0)+(o.markup_local||0)).toLocaleString("uk-UA") + "</div>"
       + "</td>"
       + "<td style='text-align:center'>"
       + (docUrl ? "<a href='" + escQ(docUrl) + "' target='_blank' style='color:#f59e0b;font-size:16px;text-decoration:none'>📁</a>" : "<span style='color:#d1d5db'>—</span>")
@@ -1000,7 +1001,7 @@ function createOrder(reqId) {
     customs_pl_status: "TBD", customs_status: "TBD", customs_date: "",
     resort: "TBD", resort_addr: "", resort_comment: "",
     logist_ua: "", transport_ua: "", delivery_status: "TBD", delivery_date: "",
-    invoice_sum: (r.sum_brutto||0)-(r.sum_netto||0), sum_netto: r.sum_netto||0, sum_brutto: r.sum_brutto||0, payment_status: "TBD", payment_date: "",
+    invoice_sum: (r.sum_brutto||0)-(r.sum_netto||0), sum_netto: r.sum_netto||0, sum_brutto: r.sum_brutto||0, markup_auto: 0, markup_local: 0, payment_status: "TBD",
     docs: r.docs||"", notes: r.comment||"", manager: r.manager||"—", logist: "—"
   };
   db.orders.unshift(o);
@@ -1064,13 +1065,11 @@ function showOrderModal(o) {
     + "<div class='form-grid'>"
     + "<div class='field'><label>СТАТУС МИТНИЦІ EX/TRANSIT</label>" + sel("of-custpl", CUSTOMS_STATUSES, isEdit ? (o.customs_pl_status||"TBD") : "TBD") + "</div>"
     + "<div class='field'><label>СТАТУС МИТНИЦІ UA</label>" + sel("of-cust", CUSTOMS_STATUSES, isEdit ? o.customs_status : "TBD") + "</div>"
-    + "<div class='field'><label>ДАТА РОЗМИТНЕННЯ</label>" + dateInput("of-custdate", isEdit ? (o.customs_date||"") : "") + "</div>"
     + "</div>"
 
     + "<div class='section-title'>Перетарка</div>"
     + "<div class='form-grid'>"
     + "<div class='field'><label>ПЕРЕТАРКА</label>" + sel("of-resort", RESORT_STATUSES, isEdit ? o.resort : "TBD") + "</div>"
-    + "<div class='field'><label>СКЛАД / АДРЕСА</label><input id='of-resaddr' value='" + escQ(isEdit ? (o.resort_addr||"") : "") + "'></div>"
     + "</div>"
 
     + "<div class='section-title'>Доставка в Україні</div>"
@@ -1083,11 +1082,12 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Фінанси</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>СУМА НЕТТО $ (собівартість)</label><input type='number' id='of-netto' value='" + (isEdit ? (o.sum_netto||0) : "") + "' oninput='calcOrdMarkup()'></div>"
-    + "<div class='field'><label>СУМА БРУТТО $ (клієнту)</label><input type='number' id='of-brutto' value='" + (isEdit ? (o.sum_brutto||0) : "") + "' oninput='calcOrdMarkup()'></div>"
-    + "<div class='field'><label>НАЦІНКА $ (авто)</label><input type='number' id='of-markup' value='" + (isEdit ? ((o.sum_brutto||0)-(o.sum_netto||0)) : "") + "' readonly style='background:#f0fdf4;font-weight:700;color:#16a34a'></div>"
+    + "<div class='field'><label>НЕТТО ФРАХТ $</label><input type='number' id='of-netto' value='" + (isEdit ? (o.sum_netto||0) : "") + "' oninput='calcOrdMarkup()'></div>"
+    + "<div class='field'><label>БРУТТО ФРАХТ $</label><input type='number' id='of-brutto' value='" + (isEdit ? (o.sum_brutto||0) : "") + "' oninput='calcOrdMarkup()'></div>"
+    + "<div class='field'><label>НАЦІНКА АВТО $</label><input type='number' id='of-markup-auto' value='" + (isEdit ? (o.markup_auto||0) : "") + "' oninput='calcOrdMarkup()'></div>"
+    + "<div class='field'><label>НАЦІНКА ЛОКАЛЬНІ $</label><input type='number' id='of-markup-local' value='" + (isEdit ? (o.markup_local||0) : "") + "' oninput='calcOrdMarkup()'></div>"
+    + "<div class='field'><label>ТОТАЛ НАЦІНКА $</label><input type='number' id='of-total-markup' value='" + (isEdit ? (((o.sum_brutto||0)-(o.sum_netto||0))+(o.markup_auto||0)+(o.markup_local||0)) : "") + "' readonly style='background:#f0fdf4;font-weight:700;color:#16a34a'></div>"
     + "<div class='field'><label>СТАТУС ОПЛАТИ</label>" + sel("of-pay", PAYMENT_STATUSES, isEdit ? o.payment_status : "TBD") + "</div>"
-    + "<div class='field'><label>ДАТА ОПЛАТИ</label>" + dateInput("of-paydate", isEdit ? (o.payment_date||"") : "") + "</div>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ ПО ОРДЕРУ (OneDrive)</label><input id='of-docs' value='" + escQ(isEdit ? (o.docs||"") : "") + "' placeholder='https://...'></div>"
     + "<div class='field'><label>МЕНЕДЖЕР</label><select id='of-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&o.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>ЛОГІСТ</label><select id='of-logist'>" + LOGISTS.map(function(l){return "<option" + ((isEdit&&o.logist===l)?" selected":"") + ">" + l + "</option>";}).join("") + "</select></div>"
@@ -1112,12 +1112,14 @@ function saveOrder(id) {
     container: gv("of-cont"), ready_date: fromISODate(gv("of-ready")), cutoff: fromISODate(gv("of-cut")),
     route_full: gv("of-rfull"), etd: fromISODate(gv("of-etd")), eta: fromISODate(gv("of-eta")),
     bol: gv("of-bol"), cargo_status: gv("of-carg"), decl: gv("of-decl"),
-    customs_pl_status: gv("of-custpl"), customs_status: gv("of-cust"), customs_date: fromISODate(gv("of-custdate")),
-    resort: gv("of-resort"), resort_addr: gv("of-resaddr"),
+    customs_pl_status: gv("of-custpl"), customs_status: gv("of-cust"),
+    resort: gv("of-resort"),
     logist_ua: gv("of-log"), transport_ua: gv("of-trans"),
     delivery_status: gv("of-deliv"), delivery_date: fromISODate(gv("of-delivdate")),
-    sum_netto: parseFloat(gv("of-netto"))||0, sum_brutto: parseFloat(gv("of-brutto"))||0, invoice_sum: (parseFloat(gv("of-brutto"))||0)-(parseFloat(gv("of-netto"))||0),
-    payment_status: gv("of-pay"), payment_date: fromISODate(gv("of-paydate")),
+    sum_netto: parseFloat(gv("of-netto"))||0, sum_brutto: parseFloat(gv("of-brutto"))||0,
+    markup_auto: parseFloat(gv("of-markup-auto"))||0, markup_local: parseFloat(gv("of-markup-local"))||0,
+    invoice_sum: ((parseFloat(gv("of-brutto"))||0)-(parseFloat(gv("of-netto"))||0))+(parseFloat(gv("of-markup-auto"))||0)+(parseFloat(gv("of-markup-local"))||0),
+    payment_status: gv("of-pay"),
     docs: gv("of-docs"), notes: gv("of-notes"), manager: gv("of-manager"), logist: gv("of-logist")
   };
   if (id) {
@@ -1207,8 +1209,10 @@ function deleteSelectedOrders() {
 function calcOrdMarkup() {
   var n = parseFloat(gv("of-netto"))||0;
   var b = parseFloat(gv("of-brutto"))||0;
-  var el = document.getElementById("of-markup");
-  if (el) el.value = b - n;
+  var ma = parseFloat(gv("of-markup-auto"))||0;
+  var ml = parseFloat(gv("of-markup-local"))||0;
+  var el = document.getElementById("of-total-markup");
+  if (el) el.value = (b - n) + ma + ml;
 }
 
 function calcReqMarkup() {
@@ -1359,10 +1363,10 @@ function exportOrdersExcel() {
       "ORDER ID": o.order_id||"", "№ Запиту": o.req_id||"", "Дата": o.date||"", "Клієнт": o.client||"",
       "Маршрут": o.route_full||o.route||"", "Букінг": o.booking||"", "Перевізник": o.carrier||"", "Контейнер": o.container||"",
       "Готовність": o.ready_date||"", "Cut-off": o.cutoff||"", "ETD": o.etd||"", "ETA": o.eta||"",
-      "Статус вантажу": o.cargo_status||"", "Митниця EX/TRANSIT": o.customs_pl_status||"", "Перетарка": o.resort||"", "Митниця UA": o.customs_status||"", "Дата розмитнення": o.customs_date||"",
+      "Статус вантажу": o.cargo_status||"", "Митниця EX/TRANSIT": o.customs_pl_status||"", "Перетарка": o.resort||"", "Митниця UA": o.customs_status||"",
       "Доставка UA": o.delivery_status||"", "Дата доставки": o.delivery_date||"",
-      "Нетто $": o.sum_netto||0, "Брутто $": o.sum_brutto||0, "Націнка $": (o.sum_brutto||0)-(o.sum_netto||0),
-      "Оплата": o.payment_status||"", "Дата оплати": o.payment_date||"",
+      "Нетто фрахт $": o.sum_netto||0, "Брутто фрахт $": o.sum_brutto||0, "Націнка авто $": o.markup_auto||0, "Націнка локальні $": o.markup_local||0, "Тотал націнка $": ((o.sum_brutto||0)-(o.sum_netto||0))+(o.markup_auto||0)+(o.markup_local||0),
+      "Оплата": o.payment_status||"",
       "Менеджер": o.manager||"", "Логіст": o.logist||"", "Примітки": o.notes||""
     };
   });
@@ -1527,7 +1531,7 @@ function computeAlerts() {
     if (o.payment_status === "Прострочено") {
       critical.push({o:o, text:"Оплата прострочена", who:who});
     }
-    if (o.payment_status === "Виставлено" && !o.payment_date) {
+    if (o.payment_status === "Виставлено") {
       warning.push({o:o, text:"Рахунок виставлено, оплата не отримана", who:who});
     }
     var dorder = daysFromNow(o.date);
