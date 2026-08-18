@@ -157,9 +157,6 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   <button class="tab-btn" id="tab-task" onclick="switchTab('tasker')">
     ✅ Tasker <span class="tab-count" id="cnt-task">0</span>
   </button>
-  <button class="tab-btn" id="tab-ctrl" onclick="switchTab('control')">
-    📊 Контроль <span class="tab-count" id="cnt-ctrl">0</span>
-  </button>
   <button class="tab-btn" id="tab-ref" onclick="switchTab('reference')">
     📚 Довідник <span class="tab-count" id="cnt-ref">0</span>
   </button>
@@ -423,21 +420,12 @@ function updateCounts() {
   document.getElementById("cnt-ord").textContent = db.orders.length;
   var cliEl = document.getElementById("cnt-cli");
   if (cliEl) cliEl.textContent = (db.clients||[]).length;
-  var ctrlEl = document.getElementById("cnt-ctrl");
-  if (ctrlEl) {
-    try {
-      var al = computeAlerts();
-      var n = al.critical.length + al.overdueTasks.length;
-      ctrlEl.textContent = n;
-      ctrlEl.className = "tab-count" + (n > 0 ? " orange" : "");
-    } catch(e) {}
-  }
   var transitEl = document.getElementById("cnt-transit");
   if (transitEl) {
     try {
       var tCount = (db.orders||[]).filter(function(o){
         var d = daysUntil(o.eta);
-        return d !== null && d >= -30 && d <= 14 && o.cargo_status !== "Прибув" && o.cargo_status !== "Розвантажено" && o.delivery_status !== "Доставлено";
+        return d !== null && d >= -7 && d <= 10 && o.cargo_status !== "Прибув" && o.cargo_status !== "Розвантажено" && o.delivery_status !== "Доставлено";
       }).length;
       transitEl.textContent = tCount;
     } catch(e) {}
@@ -511,7 +499,6 @@ function switchTab(tab) {
   document.getElementById("tab-ord").classList.toggle("active", tab === "orders");
   document.getElementById("tab-cli").classList.toggle("active", tab === "clients");
   document.getElementById("tab-task").classList.toggle("active", tab === "tasker");
-  document.getElementById("tab-ctrl").classList.toggle("active", tab === "control");
   document.getElementById("tab-transit").classList.toggle("active", tab === "transit");
   document.getElementById("tab-ref").classList.toggle("active", tab === "reference");
   render();
@@ -522,7 +509,6 @@ function render() {
   else if (currentTab === "orders") renderOrders();
   else if (currentTab === "clients") renderClients();
   else if (currentTab === "tasker") renderTasker();
-  else if (currentTab === "control") renderControl();
   else if (currentTab === "transit") renderTransit();
   else renderReference();
 }
@@ -683,7 +669,8 @@ function buildCompactOrders(filtered) {
   html += "<div style='display:flex;gap:14px;padding:4px 12px 8px;font-size:10px;color:#9ca3af;letter-spacing:.05em;width:fit-content'>"
     + "<span style='width:190px'>ОРДЕР / КЛІЄНТ</span>"
     + "<span style='width:110px'>КОНТЕЙНЕР</span>"
-    + "<span style='width:56px'>ETD/ETA</span>"
+    + "<span style='width:52px'>ETD</span>"
+    + "<span style='width:52px'>ETA</span>"
     + "<span style='width:100px'>ДОСТАВКА</span>"
     + "<span style='width:80px;text-align:right'>НАЦІНКА</span>"
     + "</div>";
@@ -701,7 +688,8 @@ function buildCompactOrders(filtered) {
       + "<div style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + "</div>"
       + "<div style='font-size:10px;color:#9ca3af'>" + transportIcon(o.type) + " " + escQ(o.carrier||"") + "</div>"
       + "</div>"
-      + "<div style='width:56px;font-size:11px'><div>" + escQ((fmtDate(o.etd)||"—").substring(0,5)) + "</div><div style='color:#0e7490'>" + escQ((fmtDate(o.eta)||"—").substring(0,5)) + "</div></div>"
+      + "<div style='width:52px;font-size:11px'>" + escQ((fmtDate(o.etd)||"—").substring(0,5)) + "</div>"
+      + "<div style='width:52px;font-size:11px;color:#0e7490'>" + escQ((fmtDate(o.eta)||"—").substring(0,5)) + "</div>"
       + "<div style='width:100px'>" + delivPill(o.delivery_status) + "</div>"
       + "<div style='width:80px;text-align:right'>"
       + "<div style='font-size:12px;font-weight:600;color:#16a34a'>$ " + markup.toLocaleString("uk-UA") + "</div>"
@@ -832,7 +820,7 @@ function renderOrders() {
     + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ</th>"
     + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>ГОТОВНІСТЬ</th><th>CUT-OFF</th>"
-    + "<th>ETD / ETA</th><th>ДОСТАВКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ETD</th><th>ETA</th><th>ДОСТАВКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
@@ -844,7 +832,8 @@ function renderOrders() {
       + "<td><div style='font-size:11px'>" + escQ(o.booking||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(o.container||"") + "</div></td>"
       + "<td style='font-size:11px;color:#0e7490'>" + escQ(fmtDate(o.ready_date)||"—") + "</td>"
       + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + escQ(fmtDate(o.cutoff)||"—") + "</td>"
-      + "<td><div style='font-size:11px'>" + escQ(fmtDate(o.etd)||"—") + "</div><div style='font-size:11px;color:#16a34a'>" + escQ(fmtDate(o.eta||"")) + "</div></td>"
+      + "<td style='font-size:11px'>" + escQ(fmtDate(o.etd)||"—") + "</td>"
+      + "<td style='font-size:11px;color:#16a34a'>" + escQ(fmtDate(o.eta)||"—") + "</td>"
       + "<td>" + delivPill(o.delivery_status) + "</td>"
       + "<td><div style='display:flex;flex-direction:column;gap:3px'>"
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' title='Менеджер' onchange='updateOrdManager(" + o.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((o.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select>"
@@ -1501,127 +1490,6 @@ function sendToLogist(reqId) {
 }
 
 
-// ── КОНТРОЛЬ (дайджест для тімліда) ──────────────────────────────
-function daysFromNow(dateStr) {
-  var t = parseDateVal(dateStr);
-  if (t === null) return null;
-  var today = new Date(); today.setHours(0,0,0,0);
-  return Math.round((t - today.getTime()) / 86400000);
-}
-
-function computeAlerts() {
-  var critical = [], warning = [];
-  (db.orders||[]).forEach(function(o){
-    var whoParts = [];
-    if (o.manager && o.manager !== "—") whoParts.push(o.manager);
-    if (o.logist && o.logist !== "—") whoParts.push(o.logist);
-    var who = whoParts.join(" / ") || "—";
-    var arrived = ["Прибув","Розвантажено"].indexOf(o.cargo_status) >= 0;
-    var moving = ["В дорозі","Прибув","Розвантажено"].indexOf(o.cargo_status) >= 0;
-    if (o.delivery_status === "Доставлено" && o.payment_status === "Оплачено") return;
-
-    var dc = daysFromNow(o.cutoff);
-    if (dc !== null && dc <= 2 && !o.booking && !moving && o.delivery_status !== "Доставлено") {
-      critical.push({o:o, text:"Cut-off " + (dc<0 ? "минув " + (-dc) + " дн тому" : (dc===0 ? "СЬОГОДНІ" : "через " + dc + " дн")) + ", букінг не підтверджено", who:who});
-    }
-    var de = daysFromNow(o.eta);
-    if (de !== null && de < 0 && !arrived && o.delivery_status !== "Доставлено") {
-      critical.push({o:o, text:"ETA минула " + (-de) + " дн тому, вантаж не прибув (статус: " + (o.cargo_status||"—") + ")", who:who});
-    }
-    if (o.payment_status === "Прострочено") {
-      critical.push({o:o, text:"Оплата прострочена", who:who});
-    }
-    if (o.payment_status === "Виставлено") {
-      warning.push({o:o, text:"Рахунок виставлено, оплата не отримана", who:who});
-    }
-    var dorder = daysFromNow(o.date);
-    var tbdCount = ["cargo_status","customs_pl_status","customs_status","resort","delivery_status","payment_status"].filter(function(f){ return (o[f]||"TBD") === "TBD"; }).length;
-    if (dorder !== null && dorder <= -7 && tbdCount >= 3) {
-      warning.push({o:o, text:"Ордеру вже " + (-dorder) + " дн, " + tbdCount + " статусів TBD — оновіть дані", who:who});
-    }
-    var dr = daysFromNow(o.ready_date);
-    if (dr !== null && dr >= 0 && dr <= 3 && !moving && !o.booking) {
-      warning.push({o:o, text:"Готовність вантажу " + (dr===0 ? "сьогодні" : "через " + dr + " дн") + ", букінгу ще немає", who:who});
-    }
-  });
-  var overdueTasks = (db.tasks||[]).filter(function(t){
-    if (t.status === "Виконана" || !t.deadline) return false;
-    var d = daysFromNow(t.deadline);
-    return d !== null && d < 0;
-  });
-  var staleReqs = (db.requests||[]).filter(function(r){
-    if (r.status !== "Новий запит") return false;
-    var d = daysFromNow(r.date);
-    return d !== null && d <= -2;
-  });
-  return {critical:critical, warning:warning, overdueTasks:overdueTasks, staleReqs:staleReqs};
-}
-
-function alertRow(a) {
-  return "<tr style='cursor:pointer' onclick='openEditOrder(" + a.o.id + ")'>"
-    + "<td><span class='order-id'>" + escQ(a.o.order_id) + "</span></td>"
-    + "<td style='font-size:12px'>" + escQ(a.o.client||"") + "</td>"
-    + "<td style='font-size:12px'>" + escQ(a.text) + "</td>"
-    + "<td style='font-size:11px;color:#6b7280;white-space:nowrap'>" + escQ(a.who) + "</td>"
-    + "</tr>";
-}
-
-function renderControl() {
-  var al = computeAlerts();
-  var inWork = db.orders.filter(function(o){ return !(o.delivery_status==="Доставлено" && o.payment_status==="Оплачено"); }).length;
-  var newReqs = db.requests.filter(function(r){ return r.status==="Новий запит" || r.status==="Прораховується"; }).length;
-
-  var html = "<div class='stats-bar'>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#ef4444'>" + al.critical.length + "</div><div class='stat-label'>КРИТИЧНО</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>" + al.warning.length + "</div><div class='stat-label'>ПОТРЕБУЄ УВАГИ</div></div>"
-    + "<div class='stat-card'><div class='stat-val'>" + inWork + "</div><div class='stat-label'>ОРДЕРІВ В РОБОТІ</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#3b82f6'>" + newReqs + "</div><div class='stat-label'>ЗАПИТИ В ОПРАЦЮВАННІ</div></div>"
-    + "</div>";
-
-  html += "<div class='toolbar'><div style='font-size:12px;color:#6b7280'>Стан на " + new Date().toLocaleString("uk-UA", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) + "</div>"
-    + "<div style='flex:1'></div><button class='btn btn-gray' onclick='renderControl()'>🔄 Оновити</button></div>";
-
-  if (al.critical.length) {
-    html += "<div class='section-title' style='color:#dc2626'>🔴 КРИТИЧНО (" + al.critical.length + ")</div>"
-      + "<div class='table-wrap' style='margin-bottom:16px'><table class='no-sticky'><thead><tr><th>ОРДЕР</th><th>КЛІЄНТ</th><th>ПРОБЛЕМА</th><th>ВІДПОВІДАЛЬНІ</th></tr></thead><tbody>"
-      + al.critical.map(alertRow).join("") + "</tbody></table></div>";
-  }
-  if (al.warning.length) {
-    html += "<div class='section-title' style='color:#d97706'>🟡 ПОТРЕБУЄ УВАГИ (" + al.warning.length + ")</div>"
-      + "<div class='table-wrap' style='margin-bottom:16px'><table class='no-sticky'><thead><tr><th>ОРДЕР</th><th>КЛІЄНТ</th><th>ПРОБЛЕМА</th><th>ВІДПОВІДАЛЬНІ</th></tr></thead><tbody>"
-      + al.warning.map(alertRow).join("") + "</tbody></table></div>";
-  }
-  if (al.overdueTasks.length) {
-    html += "<div class='section-title' style='color:#dc2626'>⏰ ПРОСТРОЧЕНІ ЗАДАЧІ (" + al.overdueTasks.length + ")</div>"
-      + "<div class='table-wrap' style='margin-bottom:16px'><table class='no-sticky'><thead><tr><th>ЗАДАЧА</th><th>ОРДЕР</th><th>КОМУ</th><th>ДЕДЛАЙН</th></tr></thead><tbody>"
-      + al.overdueTasks.map(function(t){
-          return "<tr style='cursor:pointer' onclick='openEditTask(" + t.id + ")'>"
-            + "<td style='font-size:12px'>" + escQ(t.text||"") + "</td>"
-            + "<td>" + (t.order_id ? "<span class='order-id'>" + escQ(t.order_id) + "</span>" : "—") + "</td>"
-            + "<td style='font-size:11px;font-weight:600'>" + escQ(t.assignee||"—") + "</td>"
-            + "<td style='font-size:11px;color:#ef4444;font-weight:700'>" + escQ(fmtDate(t.deadline)) + " ⚠️</td>"
-            + "</tr>";
-        }).join("") + "</tbody></table></div>";
-  }
-  if (al.staleReqs.length) {
-    html += "<div class='section-title' style='color:#d97706'>📋 ЗАПИТИ БЕЗ РУХУ 2+ ДНІ (" + al.staleReqs.length + ")</div>"
-      + "<div class='table-wrap' style='margin-bottom:16px'><table class='no-sticky'><thead><tr><th>№</th><th>КЛІЄНТ</th><th>ДАТА</th><th>МЕНЕДЖЕР</th></tr></thead><tbody>"
-      + al.staleReqs.map(function(r){
-          return "<tr style='cursor:pointer' onclick='openEditRequest(" + r.id + ")'>"
-            + "<td style='font-family:monospace;font-size:11px'>" + escQ(r.req_num||"") + "</td>"
-            + "<td style='font-size:12px'>" + escQ(r.client||"") + "</td>"
-            + "<td style='font-size:11px;color:#6b7280'>" + escQ(r.date||"") + "</td>"
-            + "<td style='font-size:11px'>" + escQ(r.manager||"—") + "</td>"
-            + "</tr>";
-        }).join("") + "</tbody></table></div>";
-  }
-  if (!al.critical.length && !al.warning.length && !al.overdueTasks.length && !al.staleReqs.length) {
-    html += "<div class='empty-state'><div class='empty-icon'>✅</div><div class='empty-text'>Все під контролем — проблем не виявлено</div></div>";
-  }
-
-  document.getElementById("main-content").innerHTML = html;
-}
-
 // ── ТРАНЗИТ (контейнери з ETA у межах 2 тижнів) ──────────────────
 function daysUntil(dateStr) {
   var t = parseDateVal(dateStr);
@@ -1667,7 +1535,7 @@ function renderTransit() {
   var list = (db.orders||[]).filter(function(o) {
     var d = daysUntil(o.eta);
     if (d === null) return false;
-    if (d < -30 || d > 14) return false;
+    if (d < -7 || d > 10) return false;
     if (o.cargo_status === "Прибув" || o.cargo_status === "Розвантажено") return false;
     if (o.delivery_status === "Доставлено") return false;
     return true;
@@ -1685,7 +1553,7 @@ function renderTransit() {
     + "</div>";
 
   html += "<div class='toolbar' style='margin-bottom:6px'>"
-    + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA за останні 30 днів або наступні 14 днів, ще не вивантажені/не доставлені. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<div style='font-size:12px;color:#6b7280;flex:1'>Контейнери з ETA за останні 7 днів або наступні 10 днів, ще не вивантажені/не доставлені. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
     + "<button class='btn btn-gray' onclick='openUbImport()'>📥 Оновити з UB</button>"
     + "<button class='btn btn-yellow' onclick='openAddTransit()'>+ Додати контейнер</button>"
     + "</div>";
