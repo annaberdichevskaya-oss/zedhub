@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Виправлення дат з FOB/CIF</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:800px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+#log{font-family:monospace;font-size:11px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:14px;max-height:440px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:14px}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:11px;margin:14px 0}
+th,td{padding:4px 7px;text-align:left;border-bottom:1px solid #f3f4f6}
+th{background:#f9fafb;font-size:10px;color:#6b7280}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔧 ZED <span>HUB</span> — виправлення дат з FOB/CIF (73 контейнери)</h1>
+  <p>Бере <b>всі поточні ордери</b> з бази, звіряє з <b>цим файлом FOB/CIF</b> (не UB) і <b>перезаписує</b> ETD/ETA правильними значеннями для контейнерів, що там знайшлись.</p>
+  <div class="warn">⚠️ Перед запуском натисни <b>💾 Бекап</b> у ZED Hub.</div>
+  <button class="btn btn-yellow" id="run-btn" onclick="runFix()">Знайти і виправити дати</button>
+  <div id="log"></div>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var DATES = {"TGHU6346174": {"etd": "", "eta": "15.07.2026"}, "TLLU4275893": {"etd": "10.06.2026", "eta": "29.07.2026"}, "ECMU7141230": {"etd": "21.06.2026", "eta": "17.08.2026"}, "FFAU4414090": {"etd": "21.06.2026", "eta": "17.08.2026"}, "CMAU8605878": {"etd": "21.06.2026", "eta": "17.08.2026"}, "CMAU3860905": {"etd": "29.06.2026", "eta": "17.08.2026"}, "TCKU7620771": {"etd": "29.06.2026", "eta": "17.08.2026"}, "CMAU4818453": {"etd": "20.06.2026", "eta": "05.08.2026"}, "CMAU7762548": {"etd": "20.06.2026", "eta": "05.08.2026"}, "TXGU7879245": {"etd": "29.06.2026", "eta": "17.08.2026"}, "SEGU6371610": {"etd": "21.06.2026", "eta": "17.08.2026"}, "CMAU8493700": {"etd": "21.06.2026", "eta": "17.08.2026"}, "CMAU6742207": {"etd": "13.07.2026", "eta": "28.08.2026"}, "CAIU3838642": {"etd": "12.07.2026", "eta": "28.08.2026"}, "EITU1613130": {"etd": "24.07.2026", "eta": "07.09.2026"}, "NGP3891558": {"etd": "27.07.2026", "eta": "19.09.2026"}, "S/O NO: NGP3956384": {"etd": "27.07.2026", "eta": "14.09.2026"}, "TRHU8288417": {"etd": "27.07.2026", "eta": "19.09.2026"}, "UETU6930747": {"etd": "02.08.2026", "eta": "03.10.2026"}, "EGSU6291851": {"etd": "24.07.2026", "eta": "07.09.2026"}, "CAJU5225598": {"etd": "03.07.2026", "eta": "19.08.2026"}, "TCNU2278336": {"etd": "03.07.2026", "eta": "19.08.2026"}, "TCKU6982502": {"etd": "03.07.2026", "eta": "19.08.2026"}, "UETU8679733": {"etd": "16.07.2026", "eta": "01.09.2026"}, "SEKU5919200": {"etd": "17.07.2026", "eta": "01.09.2026"}, "SEKU4316095": {"etd": "11.07.2026", "eta": "28.08.2026"}, "CMAU7303282": {"etd": "11.07.2026", "eta": "28.08.2026"}, "BMOU5418443": {"etd": "24.07.2026", "eta": "07.09.2026"}, "CMAU9186293": {"etd": "02.08.2026", "eta": "14.09.2026"}, "CXDU2109270": {"etd": "10.05.2026", "eta": "24.06.2026"}, "DRYU4552398": {"etd": "13.05.2026", "eta": "01.07.2026"}, "TEMU8028680": {"etd": "19.05.2026", "eta": "08.07.2026"}, "CMAU7279150": {"etd": "", "eta": "23.07.2026"}, "ECMU8167331": {"etd": "17.05.2026", "eta": "05.07.2026"}, "CMAU8413833": {"etd": "", "eta": "13.08.2026"}, "CMAU6137654": {"etd": "", "eta": "29.07.2026"}, "CMAU6795681": {"etd": "", "eta": "05.08.2026"}, "TEMU8033747": {"etd": "", "eta": "29.07.2026"}, "TEMU8032355": {"etd": "", "eta": "29.07.2026"}, "DRYU4561569": {"etd": "21.06.2026", "eta": "05.08.2026"}, "CXDU1866583": {"etd": "21.06.2026", "eta": "05.08.2026"}, "OOLU5393973": {"etd": "21.06.2026", "eta": "05.08.2026"}, "CSNU9545742": {"etd": "21.06.2026", "eta": "05.08.2026"}, "APHU4640701": {"etd": "29.06.2026", "eta": "17.08.2026"}, "CZZU4630205": {"etd": "29.06.2026", "eta": "17.08.2026"}, "MSKU4809004": {"etd": "06.06.2026", "eta": "26.07.2026"}, "TCLU2141860": {"etd": "", "eta": "25.08.2026"}, "BEAU6087725": {"etd": "29.06.2026", "eta": "17.08.2026"}, "HPCU4271958": {"etd": "21.06.2026", "eta": "11.08.2026"}, "DFSU7801350": {"etd": "04.07.2026", "eta": "19.08.2026"}, "CXDU2189743": {"etd": "04.07.2026", "eta": "19.08.2026"}, "CXDU2029597": {"etd": "14.07.2026", "eta": "08.09.2026"}, "EITU0509727": {"etd": "15.07.2026", "eta": "28.08.2026"}, "TRLU8073443": {"etd": "06.07.2026", "eta": "19.08.2026"}, "SEKU6329574": {"etd": "18.07.2026", "eta": "28.08.2026"}, "MSBU5297194": {"etd": "10.07.2026", "eta": "25.08.2026"}, "CAIU4750290": {"etd": "10.07.2026", "eta": "25.08.2026"}, "BMOU5650470": {"etd": "", "eta": "17.09.2026"}, "CMAU3446407": {"etd": "22.06.2026", "eta": "11.08.2026"}, "DRYU4566025": {"etd": "29.06.2026", "eta": "17.09.2026"}, "SEKU4309537": {"etd": "22.07.2026", "eta": "26.08.2026"}, "TCLU5308714": {"etd": "22.07.2026", "eta": "26.08.2026"}, "EMCU8051640": {"etd": "08.07.2026", "eta": "19.08.2026"}, "EGSU2009739": {"etd": "20.07.2026", "eta": "28.08.2026"}, "CXDU2211641": {"etd": "14.07.2026", "eta": "08.09.2026"}, "OOLU5395596": {"etd": "25.07.2026", "eta": "07.09.2026"}, "CSNU9536798": {"etd": "25.07.2026", "eta": "06.09.2026"}, "CMAU8817497": {"etd": "20.07.2026", "eta": "19.09.2026"}, "FFAU4466896": {"etd": "20.07.2026", "eta": "19.09.2026"}, "ECMU8082954": {"etd": "", "eta": "01.09.2026"}, "EGSU8025418": {"etd": "", "eta": "07.09.2026"}, "BEAU6301544": {"etd": "", "eta": "10.09.2026"}, "OOCU0226832": {"etd": "", "eta": "05,10,2026"}};
+
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};}
+function log(msg){var el=document.getElementById("log");el.style.display="block";el.textContent+=msg+"\n";el.scrollTop=el.scrollHeight;}
+function norm(s){return String(s||"").trim().toUpperCase();}
+
+async function runFix(){
+  document.getElementById("run-btn").disabled = true;
+  log("Читаю ордери з Supabase...");
+  var res = await fetch(SUPA_BASE+"/orders?select=id,data&limit=10000",{headers:headers()});
+  var rows = await res.json();
+  var orders = Array.isArray(rows)?rows.map(function(r){var d=r.data||{};d.id=r.id;return d;}):[];
+  log("В базі: "+orders.length+" ордерів.\n");
+
+  var withContainer = orders.filter(function(o){ return o.container && String(o.container).trim(); });
+  log("З номером контейнера: " + withContainer.length + "\n");
+
+  var updated=0, unchanged=0, notFound=[];
+  for (var j=0; j<withContainer.length; j++){
+    var o = withContainer[j];
+    var cont = norm(o.container);
+    var d = DATES[cont];
+    if (!d) { notFound.push(o.container); continue; }
+
+    var changes = [];
+    if (d.eta && o.eta !== d.eta) { changes.push("ETA:"+(o.eta||"—")+"→"+d.eta); o.eta = d.eta; }
+    if (d.etd && o.etd !== d.etd) { changes.push("ETD:"+(o.etd||"—")+"→"+d.etd); o.etd = d.etd; }
+
+    if (!changes.length) { unchanged++; continue; }
+    o._v = (o._v||0)+1;
+    try {
+      var r2 = await fetch(SUPA_BASE+"/orders", {method:"POST", headers:headers(), body:JSON.stringify({id:o.id, data:o, updated_at:new Date().toISOString()})});
+      if (r2.ok) { updated++; log("✓ "+o.order_id+" ("+o.container+"): "+changes.join(" | ")); }
+      else { log("✗ "+o.order_id+": HTTP "+r2.status); }
+    } catch(err){ log("✗ "+o.order_id+": "+err.message); }
+  }
+
+  log("");
+  log("ГОТОВО ✅  Виправлено: "+updated+" | Вже правильно: "+unchanged+" | Не знайдено у файлі: "+notFound.length);
+  if (notFound.length) log("Не знайдені: "+notFound.join(", "));
+  log("Відкрий ZED Hub і онови сторінку (Ctrl+Shift+R).");
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
