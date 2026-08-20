@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Виправлення дат ETA/ETD</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:800px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+#log{font-family:monospace;font-size:11px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:14px;max-height:440px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:14px}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔧 ZED <span>HUB</span> — виправлення дат ETA/ETD</h1>
+  <p>Старий баг у самостійному імпорті записував дати у форматі місяць/день (США) замість день.місяць, через що частина ETA/ETD у базі зараз зіпсована (наприклад "09.17" — 17-го місяця не існує).<br><br>
+  Цей інструмент бере <b>всі поточні ордери</b> з бази, звіряє з файлом UB (тепер правильним парсером) і <b>перезаписує</b> ETA/ETD правильними значеннями для тих контейнерів, що знайшлись у файлі.</p>
+  <div class="field">
+    <label>ФАЙЛ UB.xlsx</label>
+    <input type="file" id="f-file" accept=".xlsx,.xls">
+  </div>
+  <div class="warn">⚠️ Перед запуском натисни <b>💾 Бекап</b> у ZED Hub.</div>
+  <button class="btn btn-yellow" id="run-btn" onclick="runFix()">Знайти і виправити дати</button>
+  <div id="log"></div>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};}
+function log(msg){var el=document.getElementById("log");el.style.display="block";el.textContent+=msg+"\n";el.scrollTop=el.scrollHeight;}
+function norm(s){return String(s||"").trim().toUpperCase();}
+
+function ubCellText(v) {
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) {
+    var d = v.getDate(), m = v.getMonth()+1, y = v.getFullYear();
+    return (d<10?"0":"")+d+"."+(m<10?"0":"")+m+"."+y;
+  }
+  return String(v).trim();
+}
+
+function runFix(){
+  var fileInp = document.getElementById("f-file");
+  var file = fileInp && fileInp.files && fileInp.files[0];
+  if (!file) { alert("Обери файл UB.xlsx"); return; }
+  document.getElementById("run-btn").disabled = true;
+  var reader = new FileReader();
+  reader.onload = function(e){ processFile(e.target.result); };
+  reader.readAsArrayBuffer(file);
+}
+
+async function processFile(arrayBuffer){
+  try {
+    var wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    var sheetName = null;
+    for (var s=0; s<wb.SheetNames.length; s++){
+      if (wb.SheetNames[s].toLowerCase().replace(/\s/g,"").indexOf("fcl")>=0){ sheetName = wb.SheetNames[s]; break; }
+    }
+    if (!sheetName) { log("✗ Аркуш FCL не знайдено."); document.getElementById("run-btn").disabled=false; return; }
+    log("Аркуш знайдено: \"" + sheetName + "\"");
+    var ws = wb.Sheets[sheetName];
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true, cellDates: true });
+
+    // Перевірка заголовків: E=контейнер, M=ETD план, N=ETD факт, Q=ETA план, R=ETA факт
+    var hdr = rows[0];
+    var chk = [
+      [4,"контейнер"], [12,"etd"], [13,"etd"], [16,"eta"], [17,"eta"]
+    ];
+    var bad = [];
+    chk.forEach(function(c){
+      var v = String(hdr[c[0]]||"").toLowerCase();
+      if (v.indexOf(c[1])<0) bad.push("кол."+c[0]+" очікував \""+c[1]+"\" знайшов \""+(hdr[c[0]]||"")+"\"");
+    });
+    if (bad.length) {
+      log("⚠️ СТРУКТУРА ЗМІНИЛАСЬ: " + bad.join(" | "));
+      log("Зупинено. Покажи файл Claude.");
+      document.getElementById("run-btn").disabled = false;
+      return;
+    }
+    log("Заголовки перевірено — OK.\n");
+
+    var ubMap = {};
+    for (var i=1; i<rows.length; i++){
+      var r = rows[i];
+      if (!r || !r[4]) continue;
+      var cont = norm(r[4]);
+      var etdPlan = ubCellText(r[12]), etdFact = ubCellText(r[13]);
+      var etaPlan = ubCellText(r[16]), etaFact = ubCellText(r[17]);
+      var etd = etdFact || etdPlan;
+      var eta = etaFact || etaPlan;
+      if (!etd && !eta) continue;
+      ubMap[cont] = { etd: etd, eta: eta };
+    }
+    log("У файлі UB знайдено контейнерів з ETD/ETA: " + Object.keys(ubMap).length + "\n");
+
+    log("Читаю ордери з Supabase...");
+    var res = await fetch(SUPA_BASE+"/orders?select=id,data&limit=10000",{headers:headers()});
+    var supaRows = await res.json();
+    var orders = Array.isArray(supaRows)?supaRows.map(function(r){var d=r.data||{};d.id=r.id;return d;}):[];
+    log("В базі: "+orders.length+" ордерів.\n");
+
+    var withContainer = orders.filter(function(o){ return o.container && String(o.container).trim(); });
+    log("З номером контейнера: " + withContainer.length + "\n");
+
+    var updated=0, unchanged=0, notInUB=[];
+    for (var j=0; j<withContainer.length; j++){
+      var o = withContainer[j];
+      var cont = norm(o.container);
+      var ub = ubMap[cont];
+      if (!ub) { notInUB.push(o.container); continue; }
+
+      var changes = [];
+      if (ub.eta && o.eta !== ub.eta) { changes.push("ETA:"+(o.eta||"—")+"→"+ub.eta); o.eta = ub.eta; }
+      if (ub.etd && o.etd !== ub.etd) { changes.push("ETD:"+(o.etd||"—")+"→"+ub.etd); o.etd = ub.etd; }
+
+      if (!changes.length) { unchanged++; continue; }
+      o._v = (o._v||0)+1;
+      try {
+        var r2 = await fetch(SUPA_BASE+"/orders", {method:"POST", headers:headers(), body:JSON.stringify({id:o.id, data:o, updated_at:new Date().toISOString()})});
+        if (r2.ok) { updated++; log("✓ "+o.order_id+" ("+o.container+"): "+changes.join(" | ")); }
+        else { log("✗ "+o.order_id+": HTTP "+r2.status); }
+      } catch(err){ log("✗ "+o.order_id+": "+err.message); }
+    }
+
+    log("");
+    log("ГОТОВО ✅  Виправлено: "+updated+" | Вже правильно: "+unchanged+" | Не знайдено в UB: "+notInUB.length);
+    log("Відкрий ZED Hub і онови сторінку (Ctrl+Shift+R).");
+  } catch (err) {
+    log("✗ Помилка обробки файлу: " + err.message);
+  }
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
