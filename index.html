@@ -1691,7 +1691,7 @@ function runUbImport() {
       if (!sheetName) { ubLog("✗ Аркуш FCL не знайдено у файлі. Наявні аркуші: " + wb.SheetNames.join(", ")); return; }
       ubLog("Аркуш знайдено: \"" + sheetName + "\"");
       var ws = wb.Sheets[sheetName];
-      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false, cellDates: true });
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true, cellDates: true });
       if (!rows.length) { ubLog("✗ Аркуш порожній"); return; }
 
       // Перевірка заголовків
