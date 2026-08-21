@@ -188,7 +188,7 @@ var DELIVERY_STATUSES = ["Очікує","Транспорт призначено
 var PAYMENT_STATUSES = ["Очікує від фін відділу","Виставлено","Оплачено","Прострочено","TBD"];
 var BOOKING_STATUSES = ["Очікує букінг","Отримано","Підтверджено"];
 var RESORT_STATUSES = ["Не потрібна","В процесі","Завершено","TBD"];
-var TRANSPORT_TYPES = ["Авто","Море","Авіа","Мультимодальне"];
+var TRANSPORT_TYPES = ["Авто","Море","Авіа","Мультимодальне","ЖД"];
 
 function statusPill(status, map) {
   var cls = (map || {})[status] || "p-wait";
@@ -893,7 +893,7 @@ function showRequestModal(r) {
     + "<div class='section-title'>Базова інформація</div>"
     + "<div class='form-grid'>"
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='rf-num' value='" + escQ(num) + "'></div>"
-    + "<div class='field'><label>КЛІЄНТ *</label><select id='rf-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&r.client===c.name)?" selected":"") + ">" + escQ(c.name) + "</option>";}).join("") + "</select></div>"
+    + "<div class='field'><label>КЛІЄНТ *</label><input id='rf-client' list='rf-client-list' value='" + escQ(isEdit ? (r.client||"") : "") + "' placeholder='Почни вводити або впиши нового'><datalist id='rf-client-list'>" + (db.clients||[]).map(function(c){return "<option value='" + escQ(c.name) + "'>";}).join("") + "</datalist></div>"
     + "<div class='field'><label>КОНТАКТ</label><input id='rf-contact' value='" + escQ(isEdit ? (r.contact||"") : "") + "'></div>"
     + "<div class='field'><label>МАРШРУТ</label><input id='rf-route' value='" + escQ(isEdit ? r.route : "") + "'></div>"
     + "<div class='field'><label>ТИП ПЕРЕВЕЗЕННЯ</label><select id='rf-type'>"
@@ -1386,7 +1386,7 @@ function genReqNum() {
 }
 
 function transportIcon(t) {
-  var m = {"Авто":"🚚","Море":"🚢","Авіа":"✈️","Мультимодальне":"🚢🚚","Комбіноване":"🚢🚚"};
+  var m = {"Авто":"🚚","Море":"🚢","Авіа":"✈️","Мультимодальне":"🚢🚚","Комбіноване":"🚢🚚","ЖД":"🚂"};
   return m[t] || "🚢";
 }
 
@@ -1862,6 +1862,7 @@ function renderStatistics() {
   var byIncoterm = { FOB: {count:0, earnings:0, netto:0, brutto:0}, CIF: {count:0, earnings:0, netto:0, brutto:0}, FCA: {count:0, earnings:0, netto:0, brutto:0}, EXW: {count:0, earnings:0, netto:0, brutto:0}, "Інше": {count:0, earnings:0, netto:0, brutto:0} };
   var byMonth = {}; // key -> {label, sortKey, earnings, auto}
   var byClient = {}; // client -> {count, earnings}
+  var byTransport = {}; // тип перевезення -> {count, earnings}
   var totalAuto = 0;
   var clientsSet = {};
 
@@ -1888,12 +1889,19 @@ function renderStatistics() {
     byClient[cl].count++;
     byClient[cl].earnings += earn;
     clientsSet[cl] = true;
+
+    var tt = o.type || "Не вказано";
+    if (!byTransport[tt]) byTransport[tt] = { count: 0, earnings: 0 };
+    byTransport[tt].count++;
+    byTransport[tt].earnings += earn;
   });
 
   var monthEntries = Object.keys(byMonth).map(function(k){ return byMonth[k]; }).sort(function(a,b){ return a.sortKey - b.sortKey; });
   var clientEntries = Object.keys(byClient).map(function(k){ return { name: k, count: byClient[k].count, earnings: byClient[k].earnings }; })
     .sort(function(a,b){ return b.earnings - a.earnings; });
   var topClients = clientEntries.slice(0, 8);
+  var transportEntries = Object.keys(byTransport).map(function(k){ return { name: k, count: byTransport[k].count, earnings: byTransport[k].earnings }; })
+    .sort(function(a,b){ return b.earnings - a.earnings; });
 
   var avgMarkup = totalOrders ? (totalEarnings / totalOrders) : 0;
   var activeClients = Object.keys(clientsSet).length;
@@ -1912,7 +1920,7 @@ function renderStatistics() {
   // ── Загальні картки ──
   html += "<div class='stats-bar'>"
     + "<div class='stat-card'><div class='stat-val'>" + totalOrders + "</div><div class='stat-label'>ВСЬОГО ОРДЕРІВ</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + Math.round(totalEarnings).toLocaleString("uk-UA") + "</div><div class='stat-label'>ЗАГАЛЬНИЙ ЗАРОБІТОК</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + Math.round(totalEarnings).toLocaleString("uk-UA") + "</div><div class='stat-label'>ЗАГАЛЬНА НАЦІНКА</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>$ " + Math.round(avgMarkup).toLocaleString("uk-UA") + "</div><div class='stat-label'>СЕРЕДНЯ НАЦІНКА / ОРДЕР</div></div>"
     + "<div class='stat-card'><div class='stat-val'>" + activeClients + "</div><div class='stat-label'>КЛІЄНТІВ</div></div>"
     + "</div>";
@@ -1933,7 +1941,7 @@ function renderStatistics() {
     + "<div class='table-wrap' style='padding:18px;background:#fff'>"
     + "<div class='section-title' style='margin-top:0'>Деталі за умовами поставки</div>"
     + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
-    + "<th style='color:#6b7280;padding:6px 4px'>УМОВИ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НЕТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>БРУТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ЗАРОБІТОК $</th>"
+    + "<th style='color:#6b7280;padding:6px 4px'>УМОВИ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НЕТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>БРУТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НАЦІНКА $</th>"
     + "</tr></thead><tbody>"
     + ["FOB","CIF","FCA","EXW","Інше"].map(function(k){
         var d = byIncoterm[k];
@@ -1948,9 +1956,9 @@ function renderStatistics() {
     + "</div>"
     + "</div>";
 
-  // ── Заробіток по місяцях ──
+  // ── Націнка по місяцях ──
   html += "<div class='table-wrap' style='padding:18px;background:#fff;margin-bottom:16px'>"
-    + "<div class='section-title' style='margin-top:0'>Заробіток по місяцях</div>"
+    + "<div class='section-title' style='margin-top:0'>Націнка по місяцях</div>"
     + (monthEntries.length ? "<canvas id='chartMonthly' height='90'></canvas>" : "<div style='color:#9ca3af;font-size:13px;padding:10px 0'>Недостатньо дат для графіка</div>")
     + "</div>";
 
@@ -1969,12 +1977,32 @@ function renderStatistics() {
     + "</div>"
     + "</div>";
 
+  // ── По типу перевезення ──
+  html += "<div style='display:grid;grid-template-columns:1fr 1.3fr;gap:16px;margin-bottom:16px'>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>По типу перевезення</div>"
+    + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
+    + "<th style='color:#6b7280;padding:6px 4px'>ТИП</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НАЦІНКА $</th>"
+    + "</tr></thead><tbody>"
+    + transportEntries.map(function(t){
+        return "<tr><td style='padding:7px 4px'>" + transportIcon(t.name) + " " + escQ(t.name) + "</td>"
+          + "<td style='padding:7px 4px;text-align:right'>" + t.count + "</td>"
+          + "<td style='padding:7px 4px;text-align:right;font-weight:700;color:#16a34a'>$ " + Math.round(t.earnings).toLocaleString("uk-UA") + "</td></tr>";
+      }).join("")
+    + "</tbody></table>"
+    + "</div>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>Розподіл націнки по типу перевезення</div>"
+    + "<canvas id='chartTransport' height='170'></canvas>"
+    + "</div>"
+    + "</div>";
+
   // ── По клієнтам ──
   html += "<div style='display:grid;grid-template-columns:1.3fr 1fr;gap:16px'>"
     + "<div class='table-wrap' style='padding:18px;background:#fff'>"
     + "<div class='section-title' style='margin-top:0'>По клієнтам</div>"
     + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
-    + "<th style='color:#6b7280;padding:6px 4px'>КЛІЄНТ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ЗАРОБІТОК $</th>"
+    + "<th style='color:#6b7280;padding:6px 4px'>КЛІЄНТ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НАЦІНКА $</th>"
     + "</tr></thead><tbody>"
     + clientEntries.map(function(c){
         return "<tr><td style='padding:7px 4px;font-weight:600'>"+escQ(c.name)+"</td>"
@@ -2011,7 +2039,7 @@ function renderStatistics() {
       type: "line",
       data: {
         labels: monthEntries.map(function(m){ return m.label; }),
-        datasets: [{ label: "Заробіток $", data: monthEntries.map(function(m){ return Math.round(m.earnings); }), borderColor: GREEN, backgroundColor: "rgba(22,163,74,.12)", fill: true, tension: 0.3, pointRadius: 3 }]
+        datasets: [{ label: "Націнка $", data: monthEntries.map(function(m){ return Math.round(m.earnings); }), borderColor: GREEN, backgroundColor: "rgba(22,163,74,.12)", fill: true, tension: 0.3, pointRadius: 3 }]
       },
       options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } } }
     });
@@ -2026,11 +2054,21 @@ function renderStatistics() {
     });
   }
 
+  var transportColors = { "Море": TEAL, "Авто": AMBER, "Авіа": PURPLE, "Мультимодальне": GREEN, "ЖД": "#dc2626", "Не вказано": GRAY };
+  _statsCharts.transport = new Chart(document.getElementById("chartTransport"), {
+    type: "doughnut",
+    data: {
+      labels: transportEntries.map(function(t){ return t.name; }),
+      datasets: [{ data: transportEntries.map(function(t){ return Math.round(t.earnings); }), backgroundColor: transportEntries.map(function(t){ return transportColors[t.name] || GRAY; }), borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { position: "bottom", labels: { font: { size: 11 }, padding: 10 } } }, cutout: "55%" }
+  });
+
   _statsCharts.clients = new Chart(document.getElementById("chartClients"), {
     type: "bar",
     data: {
       labels: topClients.map(function(c){ return c.name.length>22 ? c.name.substring(0,20)+"…" : c.name; }),
-      datasets: [{ label: "Заробіток $", data: topClients.map(function(c){ return Math.round(c.earnings); }), backgroundColor: TEAL, borderRadius: 4 }]
+      datasets: [{ label: "Націнка $", data: topClients.map(function(c){ return Math.round(c.earnings); }), backgroundColor: TEAL, borderRadius: 4 }]
     },
     options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 11 } } } } }
   });
