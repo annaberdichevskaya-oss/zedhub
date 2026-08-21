@@ -688,6 +688,7 @@ function buildCompactOrders(filtered) {
       + "<div style='width:110px'>"
       + "<div style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + "</div>"
       + "<div style='font-size:10px;color:#9ca3af'>" + transportIcon(o.type) + " " + escQ(o.carrier||"") + "</div>"
+      + (o.supplier ? "<div style='font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>🏭 " + escQ(o.supplier) + "</div>" : "")
       + "</div>"
       + "<div style='width:52px;font-size:11px'>" + escQ((fmtDate(o.etd)||"—").substring(0,5)) + "</div>"
       + "<div style='width:52px;font-size:11px;color:#0e7490'>" + escQ((fmtDate(o.eta)||"—").substring(0,5)) + "</div>"
@@ -829,7 +830,7 @@ function renderOrders() {
     html += "<tr class='" + (_selectedOrders[o.id]?"row-selected":"") + "'>"
       + "<td style='text-align:center'><input type='checkbox' " + (_selectedOrders[o.id]?"checked":"") + " onchange='toggleOrderSelect(" + o.id + ",this.checked)'></td>"
       + "<td><div class='order-id'>" + escQ(o.order_id) + "</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>" + escQ(o.req_id||"") + " &bull; " + escQ(fmtDate(o.date||"")) + "</div></td>"
-      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + escQ(o.client) + "</div>" + (function(){var rt=o.route_full||o.route||o.incoterms||"";return rt?"<div style='font-size:10px;color:#6b7280'>"+escQ(rt)+"</div>":"";})() + (o.carrier ? "<div style='font-size:10px;color:#9ca3af'>" + transportIcon(o.type) + " " + escQ(o.carrier) + "</div>" : "") + "</td>"
+      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + escQ(o.client) + "</div>" + (function(){var rt=o.route_full||o.route||o.incoterms||"";return rt?"<div style='font-size:10px;color:#6b7280'>"+escQ(rt)+"</div>":"";})() + (o.supplier ? "<div style='font-size:10px;color:#9ca3af'>🏭 " + escQ(o.supplier) + "</div>" : "") + (o.carrier ? "<div style='font-size:10px;color:#9ca3af'>" + transportIcon(o.type) + " " + escQ(o.carrier) + "</div>" : "") + "</td>"
       + "<td><div style='font-size:11px'>" + escQ(o.booking||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(o.container||"") + "</div></td>"
       + "<td style='font-size:11px;color:#0e7490'>" + escQ(fmtDate(o.ready_date)||"—") + "</td>"
       + "<td style='font-size:11px;color:#ef4444;font-weight:600'>" + escQ(fmtDate(o.cutoff)||"—") + "</td>"
