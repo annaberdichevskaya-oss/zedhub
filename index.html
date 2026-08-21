@@ -1040,6 +1040,7 @@ function showOrderModal(o) {
     + "<div class='field'><label>ДАТА ОРДЕРУ</label>" + dateInput("of-date", isEdit ? (o.date||"") : new Date().toLocaleDateString("uk-UA")) + "</div>"
     + "<div class='field'><label>КЛІЄНТ</label><select id='of-client'><option value=''>— оберіть клієнта —</option>" + (db.clients||[]).map(function(c){return "<option" + ((isEdit&&o.client===c.name)?" selected":"") + ">" + escQ(c.name) + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>МАРШРУТ відпр → приб</label><input id='of-rfull' value='" + escQ(isEdit ? (o.route_full||o.route||"") : "") + "' placeholder='Shanghai → Київ'></div>"
+    + "<div class='field'><label>УМОВИ ПОСТАВКИ</label><select id='of-incoterm-code'>" + ["—","FOB","CIF","FCA","EXW"].map(function(t){return "<option" + ((isEdit&&o.incoterm_code===t)?" selected":"") + ">" + t + "</option>";}).join("") + "</select></div>"
     + "<div class='field'><label>ТИП ПЕРЕВЕЗЕННЯ</label>" + sel("of-type", TRANSPORT_TYPES, isEdit ? (o.type||"Море") : "Море") + "</div>"
     + "<div class='field'><label>№ ЗАПИТУ (якщо є)</label><input id='of-req' value='" + escQ(isEdit ? (o.req_id||"") : "") + "'></div>"
     + "</div>"
@@ -1107,7 +1108,7 @@ function saveOrder(id) {
     req_id: gv("of-req"), date: fromISODate(gv("of-date")),
     booking: gv("of-book"), carrier: gv("of-carr"),
     container: gv("of-cont"), ready_date: fromISODate(gv("of-ready")), cutoff: fromISODate(gv("of-cut")),
-    route_full: gv("of-rfull"), etd: fromISODate(gv("of-etd")), eta: fromISODate(gv("of-eta")),
+    route_full: gv("of-rfull"), incoterm_code: gv("of-incoterm-code"), etd: fromISODate(gv("of-etd")), eta: fromISODate(gv("of-eta")),
     bol: gv("of-bol"), cargo_status: gv("of-carg"), decl: gv("of-decl"),
     customs_pl_status: gv("of-custpl"), customs_status: gv("of-cust"),
     resort: gv("of-resort"),
@@ -1828,9 +1829,13 @@ function orderEarnings(o) {
 }
 
 function classifyIncoterms(o) {
+  var clean = String(o.incoterm_code||"").trim().toUpperCase();
+  if (clean === "FOB" || clean === "CIF" || clean === "FCA" || clean === "EXW") return clean;
   var t = String(o.incoterms||"").trim().toUpperCase();
   if (t.indexOf("FOB") === 0) return "FOB";
   if (t.indexOf("CIF") === 0) return "CIF";
+  if (t.indexOf("FCA") === 0) return "FCA";
+  if (t.indexOf("EXW") === 0) return "EXW";
   return "Інше";
 }
 
@@ -1854,7 +1859,7 @@ function renderStatistics() {
   var orders = (db.orders || []).filter(function(o){ return inDateRange(o.date, statsDateFrom, statsDateTo); });
   var totalOrders = orders.length;
   var totalEarnings = 0;
-  var byIncoterm = { FOB: {count:0, earnings:0, netto:0, brutto:0}, CIF: {count:0, earnings:0, netto:0, brutto:0}, "Інше": {count:0, earnings:0, netto:0, brutto:0} };
+  var byIncoterm = { FOB: {count:0, earnings:0, netto:0, brutto:0}, CIF: {count:0, earnings:0, netto:0, brutto:0}, FCA: {count:0, earnings:0, netto:0, brutto:0}, EXW: {count:0, earnings:0, netto:0, brutto:0}, "Інше": {count:0, earnings:0, netto:0, brutto:0} };
   var byMonth = {}; // key -> {label, sortKey, earnings, auto}
   var byClient = {}; // client -> {count, earnings}
   var totalAuto = 0;
@@ -1930,9 +1935,9 @@ function renderStatistics() {
     + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
     + "<th style='color:#6b7280;padding:6px 4px'>УМОВИ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НЕТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>БРУТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ЗАРОБІТОК $</th>"
     + "</tr></thead><tbody>"
-    + ["FOB","CIF","Інше"].map(function(k){
+    + ["FOB","CIF","FCA","EXW","Інше"].map(function(k){
         var d = byIncoterm[k];
-        var dot = k==="FOB" ? "#f59e0b" : (k==="CIF" ? "#0e7490" : "#9ca3af");
+        var dot = k==="FOB" ? "#f59e0b" : (k==="CIF" ? "#0e7490" : (k==="FCA" ? "#6d28d9" : (k==="EXW" ? "#16a34a" : "#9ca3af")));
         return "<tr><td style='padding:7px 4px'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:"+dot+";margin-right:6px'></span>"+k+"</td>"
           + "<td style='padding:7px 4px;text-align:right'>"+d.count+"</td>"
           + "<td style='padding:7px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.netto).toLocaleString("uk-UA")+"</td>"
@@ -1990,13 +1995,13 @@ function renderStatistics() {
   destroyStatsCharts();
   if (typeof Chart === "undefined") return;
 
-  var AMBER = "#f59e0b", TEAL = "#0e7490", GRAY = "#d1d5db", GREEN = "#16a34a";
+  var AMBER = "#f59e0b", TEAL = "#0e7490", GRAY = "#d1d5db", GREEN = "#16a34a", PURPLE = "#6d28d9";
 
   _statsCharts.incoterms = new Chart(document.getElementById("chartIncoterms"), {
     type: "doughnut",
     data: {
-      labels: ["FOB", "CIF", "Інше"],
-      datasets: [{ data: [byIncoterm.FOB.earnings, byIncoterm.CIF.earnings, byIncoterm["Інше"].earnings], backgroundColor: [AMBER, TEAL, GRAY], borderWidth: 0 }]
+      labels: ["FOB", "CIF", "FCA", "EXW", "Інше"],
+      datasets: [{ data: [byIncoterm.FOB.earnings, byIncoterm.CIF.earnings, byIncoterm.FCA.earnings, byIncoterm.EXW.earnings, byIncoterm["Інше"].earnings], backgroundColor: [AMBER, TEAL, PURPLE, GREEN, GRAY], borderWidth: 0 }]
     },
     options: { plugins: { legend: { position: "bottom", labels: { font: { size: 11 }, padding: 12 } } }, cutout: "62%" }
   });
