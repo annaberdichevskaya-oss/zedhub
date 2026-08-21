@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Оновлення маршрутів з FOB/CIF</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:700px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+#log{font-family:monospace;font-size:11px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:14px;max-height:440px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:14px}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🛣 ZED <span>HUB</span> — маршрути з FOB/CIF (75 контейнерів)</h1>
+  <p>Бере <b>всі поточні ордери</b> з бази, звіряє за номером контейнера з цим файлом і записує маршрут (наприклад "FOB NINGBO") у поле маршруту.</p>
+  <div class="warn">⚠️ Перед запуском натисни <b>💾 Бекап</b> у ZED Hub.</div>
+  <button class="btn btn-yellow" id="run-btn" onclick="runFix()">Оновити маршрути</button>
+  <div id="log"></div>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var ROUTES = {"TGHU6346174": "FOB XIAMEN", "TLLU4275893": "FOB NINGBO", "ECMU7141230": "FOB NINGBO", "FFAU4414090": "FOB NINGBO", "CMAU8605878": "FOB NINGBO", "CMAU3860905": "FOB NINGBO", "TCKU7620771": "FOB NINGBO", "CMAU4818453": "FOB XIAMEN", "CMAU7762548": "FOB XIAMEN", "TXGU7879245": "FOB NINGBO", "SEGU6371610": "FOB NINGBO", "CMAU8493700": "FOB NINGBO", "CMAU6742207": "FOB CHITTAGONG", "CAIU3838642": "FOB CHITTAGONG", "EITU1613130": "FOB Ningbo", "NGP3891558": "FOB Ningbo", "S/O NO: NGP3956384": "FOB Ningbo", "TRHU8288417": "FOB Ningbo", "UETU6930747": "FOB Ningbo", "EGSU6291851": "FOB Ningbo", "CAJU5225598": "FOB XIAMEN", "TCNU2278336": "FOB XIAMEN", "TCKU6982502": "FOB XIAMEN", "UETU8679733": "FOB  Shanghai", "SEKU5919200": "FOB NINGBO", "SEKU4316095": "FOB XIAMEN", "CMAU7303282": "FOB XIAMEN", "BMOU5418443": "FOB XIAMEN", "CMAU9186293": "FOB Yantian", "LCL": "FOB XIAMEN", "CXDU2109270": "CIF", "DRYU4552398": "CIF", "TEMU8028680": "CIF", "CMAU7279150": "CIF", "ECMU8167331": "CIF", "CMAU8413833": "CIF", "CMAU6137654": "CIF", "CMAU6795681": "CIF", "TEMU8033747": "CIF", "TEMU8032355": "CIF", "DRYU4561569": "CIF", "CXDU1866583": "CIF", "OOLU5393973": "CIF", "CSNU9545742": "CIF", "APHU4640701": "CIF", "CZZU4630205": "CIF", "MSKU4809004": "CIF", "TCLU2141860": "CIF", "BEAU6087725": "CIF", "HPCU4271958": "CIF", "DFSU7801350": "CIF", "CXDU2189743": "CIF", "CXDU2029597": "CIF", "EITU0509727": "CIF", "TRLU8073443": "CIF", "SEKU6329574": "CIF", "ЧЕКАЄМО НОМЕР КОНТ": "CIF", "MSBU5297194": "CIF", "CAIU4750290": "CIF", "BMOU5650470": "CIF", "CMAU3446407": "CIF", "DRYU4566025": "CIF", "SEKU4309537": "CIF", "TCLU5308714": "CIF", "EMCU8051640": "CIF", "EGSU2009739": "CIF", "CXDU2211641": "CIF", "OOLU5395596": "CIF", "CSNU9536798": "CIF", "CMAU8817497": "CIF", "FFAU4466896": "CIF", "ECMU8082954": "CIF", "EGSU8025418": "CIF", "BEAU6301544": "CIF", "OOCU0226832": "CIF"};
+
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};}
+function log(msg){var el=document.getElementById("log");el.style.display="block";el.textContent+=msg+"\n";el.scrollTop=el.scrollHeight;}
+function norm(s){return String(s||"").trim().toUpperCase();}
+
+async function runFix(){
+  document.getElementById("run-btn").disabled = true;
+  log("Читаю ордери з Supabase...");
+  var res = await fetch(SUPA_BASE+"/orders?select=id,data&limit=10000",{headers:headers()});
+  var rows = await res.json();
+  var orders = Array.isArray(rows)?rows.map(function(r){var d=r.data||{};d.id=r.id;return d;}):[];
+  log("В базі: "+orders.length+" ордерів.\n");
+
+  var withContainer = orders.filter(function(o){ return o.container && String(o.container).trim(); });
+  log("З номером контейнера: " + withContainer.length + "\n");
+
+  var updated=0, unchanged=0, notFound=[];
+  for (var j=0; j<withContainer.length; j++){
+    var o = withContainer[j];
+    var cont = norm(o.container);
+    var route = ROUTES[cont];
+    if (!route) { notFound.push(o.container); continue; }
+
+    if (o.route_full === route) { unchanged++; continue; }
+    var old = o.route_full || "—";
+    o.route_full = route;
+    o.route = route;
+    o._v = (o._v||0)+1;
+    try {
+      var r2 = await fetch(SUPA_BASE+"/orders", {method:"POST", headers:headers(), body:JSON.stringify({id:o.id, data:o, updated_at:new Date().toISOString()})});
+      if (r2.ok) { updated++; log("✓ "+o.order_id+" ("+o.container+"): "+old+" → "+route); }
+      else { log("✗ "+o.order_id+": HTTP "+r2.status); }
+    } catch(err){ log("✗ "+o.order_id+": "+err.message); }
+  }
+
+  log("");
+  log("ГОТОВО ✅  Оновлено: "+updated+" | Вже правильно: "+unchanged+" | Не знайдено у файлі: "+notFound.length);
+  if (notFound.length) log("Не знайдені: "+notFound.join(", "));
+  log("Відкрий ZED Hub і онови сторінку (Ctrl+Shift+R).");
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
