@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Нормалізація клієнта "Гарні Речі"</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:800px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+#log{font-family:monospace;font-size:11px;background:#1a1a2e;color:#a7f3d0;border-radius:8px;padding:14px;max-height:460px;overflow-y:auto;white-space:pre-wrap;display:none;margin-top:14px}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🏷 ZED <span>HUB</span> — нормалізація "Гарні Речі"</h1>
+  <p>Знаходить усі варіанти написання (ТОВ «ГАРНІ РЕЧІ», ТОВ "Гарні речі", гарні речі тощо) в <b>ордерах</b>, <b>запитах</b> і <b>базі клієнтів</b>, і замінює на єдиний варіант: <b>Гарні Речі</b>.</p>
+  <div class="warn">⚠️ Перед запуском натисни <b>💾 Бекап</b> у ZED Hub.</div>
+  <button class="btn btn-yellow" id="run-btn" onclick="runNormalize()">Нормалізувати клієнта</button>
+  <div id="log"></div>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var TARGET = "Гарні Речі";
+
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};}
+function log(msg){var el=document.getElementById("log");el.style.display="block";el.textContent+=msg+"\n";el.scrollTop=el.scrollHeight;}
+
+function isVariant(name) {
+  if (!name) return false;
+  var n = String(name).toLowerCase()
+    .replace(/тов|фоп/g, "")
+    .replace(/[«»"'"„”]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return n === "гарні речі";
+}
+
+async function fetchTable(table) {
+  var res = await fetch(SUPA_BASE + "/" + table + "?select=id,data&limit=10000", { headers: headers() });
+  var rows = await res.json();
+  return Array.isArray(rows) ? rows.map(function(r){ var d = r.data||{}; d.id = r.id; return d; }) : [];
+}
+
+async function updateRecord(table, rec) {
+  rec._v = (rec._v||0) + 1;
+  return fetch(SUPA_BASE + "/" + table, { method: "POST", headers: headers(), body: JSON.stringify({ id: rec.id, data: rec, updated_at: new Date().toISOString() }) });
+}
+
+async function runNormalize() {
+  document.getElementById("run-btn").disabled = true;
+
+  log("Читаю ордери, запити, клієнтів з Supabase...\n");
+  var orders = await fetchTable("orders");
+  var requests = await fetchTable("requests");
+  var clients = await fetchTable("clients");
+  log("Ордерів: " + orders.length + " | Запитів: " + requests.length + " | Клієнтів: " + clients.length + "\n");
+
+  var updatedOrders = 0, updatedRequests = 0, updatedClients = 0;
+  var foundVariants = {};
+
+  for (var i = 0; i < orders.length; i++) {
+    var o = orders[i];
+    if (isVariant(o.client) && o.client !== TARGET) {
+      foundVariants[o.client] = (foundVariants[o.client]||0) + 1;
+      var old = o.client;
+      o.client = TARGET;
+      var r = await updateRecord("orders", o);
+      if (r.ok) { updatedOrders++; log("✓ Ордер " + o.order_id + ": \"" + old + "\" → \"" + TARGET + "\""); }
+      else log("✗ Ордер " + o.order_id + ": HTTP " + r.status);
+    }
+  }
+
+  log("");
+  for (var j = 0; j < requests.length; j++) {
+    var req = requests[j];
+    if (isVariant(req.client) && req.client !== TARGET) {
+      foundVariants[req.client] = (foundVariants[req.client]||0) + 1;
+      var oldR = req.client;
+      req.client = TARGET;
+      var r2 = await updateRecord("requests", req);
+      if (r2.ok) { updatedRequests++; log("✓ Запит №" + (req.req_num||req.id) + ": \"" + oldR + "\" → \"" + TARGET + "\""); }
+      else log("✗ Запит " + req.id + ": HTTP " + r2.status);
+    }
+  }
+
+  log("");
+  var matchingClientRecords = [];
+  for (var k = 0; k < clients.length; k++) {
+    var cl = clients[k];
+    if (isVariant(cl.name)) matchingClientRecords.push(cl);
+  }
+  if (matchingClientRecords.length > 1) {
+    log("⚠️ Знайдено " + matchingClientRecords.length + " окремих записів клієнта, що позначають те саме:");
+    matchingClientRecords.forEach(function(c){ log("   • \"" + c.name + "\" (id=" + c.id + ", email: " + ((c.emails||[]).join(",")||"—") + ")"); });
+    log("   Записи НЕ об'єднані автоматично (щоб не втратити email/теги) — онови назву головного вручну у вкладці Клієнти, решту онови/видали сама.");
+  }
+  for (var m = 0; m < matchingClientRecords.length; m++) {
+    var c = matchingClientRecords[m];
+    if (c.name !== TARGET) {
+      var oldC = c.name;
+      c.name = TARGET;
+      var r3 = await updateRecord("clients", c);
+      if (r3.ok) { updatedClients++; log("✓ Клієнт (id=" + c.id + "): \"" + oldC + "\" → \"" + TARGET + "\""); }
+      else log("✗ Клієнт " + c.id + ": HTTP " + r3.status);
+    }
+  }
+
+  log("");
+  log("ГОТОВО ✅  Оновлено ордерів: " + updatedOrders + " | запитів: " + updatedRequests + " | записів клієнта: " + updatedClients);
+  log("Відкрий ZED Hub і онови сторінку (Ctrl+Shift+R).");
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
