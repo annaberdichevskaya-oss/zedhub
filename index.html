@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ZED Hub</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1a1a2e;min-height:100vh}
@@ -156,6 +157,9 @@ select.inline{border:none;background:transparent;font-size:12px;cursor:pointer;o
   </button>
   <button class="tab-btn" id="tab-task" onclick="switchTab('tasker')">
     ✅ Tasker <span class="tab-count" id="cnt-task">0</span>
+  </button>
+  <button class="tab-btn" id="tab-stats" onclick="switchTab('statistics')">
+    📊 Статистика
   </button>
   <button class="tab-btn" id="tab-ref" onclick="switchTab('reference')">
     📚 Довідник <span class="tab-count" id="cnt-ref">0</span>
@@ -500,6 +504,7 @@ function switchTab(tab) {
   document.getElementById("tab-cli").classList.toggle("active", tab === "clients");
   document.getElementById("tab-task").classList.toggle("active", tab === "tasker");
   document.getElementById("tab-transit").classList.toggle("active", tab === "transit");
+  document.getElementById("tab-stats").classList.toggle("active", tab === "statistics");
   document.getElementById("tab-ref").classList.toggle("active", tab === "reference");
   render();
 }
@@ -510,6 +515,7 @@ function render() {
   else if (currentTab === "clients") renderClients();
   else if (currentTab === "tasker") renderTasker();
   else if (currentTab === "transit") renderTransit();
+  else if (currentTab === "statistics") renderStatistics();
   else renderReference();
 }
 
@@ -1785,6 +1791,244 @@ async function applyUbUpdates(parsed) {
   if (notFound.length) ubLog("Не знайдені контейнери (можливо, ще не імпортовані в ZED Hub): " + notFound.join(", "));
   document.getElementById("ub-run-btn").disabled = false;
   try { db = await cloudLoad(); render(); } catch(e) {}
+}
+
+// ── СТАТИСТИКА ────────────────────────────────────────────────────
+var _statsCharts = {}; // зберігаємо інстанси Chart.js щоб знищувати перед перемальовкою
+var statsDateFrom = "";
+var statsDateTo = "";
+
+function isoToday() {
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function isoMonthStart(offsetMonths) {
+  var d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + offsetMonths);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function isoMonthEnd(offsetMonths) {
+  var d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + offsetMonths + 1);
+  d.setDate(0);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function statsSetPreset(preset) {
+  if (preset === "all") { statsDateFrom = ""; statsDateTo = ""; }
+  else if (preset === "thisMonth") { statsDateFrom = isoMonthStart(0); statsDateTo = isoToday(); }
+  else if (preset === "lastMonth") { statsDateFrom = isoMonthStart(-1); statsDateTo = isoMonthEnd(-1); }
+  else if (preset === "quarter") { statsDateFrom = isoMonthStart(-2); statsDateTo = isoToday(); }
+  renderStatistics();
+}
+
+function orderEarnings(o) {
+  return ((o.sum_brutto||0) - (o.sum_netto||0)) + (o.markup_auto||0) + (o.markup_local||0);
+}
+
+function classifyIncoterms(o) {
+  var t = String(o.incoterms||"").trim().toUpperCase();
+  if (t.indexOf("FOB") === 0) return "FOB";
+  if (t.indexOf("CIF") === 0) return "CIF";
+  return "Інше";
+}
+
+function statsMonthKey(dateStr) {
+  var t = parseDateVal(dateStr);
+  if (t === null) return null;
+  var dt = new Date(t);
+  var y = dt.getFullYear(), m = dt.getMonth();
+  return { key: y + "-" + String(m+1).padStart(2,"0"), label: UA_MONTHS_SHORT[m] + " " + String(y).substring(2), sortKey: y*100+m };
+}
+var UA_MONTHS_SHORT = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"];
+
+function destroyStatsCharts() {
+  Object.keys(_statsCharts).forEach(function(k){
+    try { _statsCharts[k].destroy(); } catch(e){}
+  });
+  _statsCharts = {};
+}
+
+function renderStatistics() {
+  var orders = (db.orders || []).filter(function(o){ return inDateRange(o.date, statsDateFrom, statsDateTo); });
+  var totalOrders = orders.length;
+  var totalEarnings = 0;
+  var byIncoterm = { FOB: {count:0, earnings:0, netto:0, brutto:0}, CIF: {count:0, earnings:0, netto:0, brutto:0}, "Інше": {count:0, earnings:0, netto:0, brutto:0} };
+  var byMonth = {}; // key -> {label, sortKey, earnings, auto}
+  var byClient = {}; // client -> {count, earnings}
+  var totalAuto = 0;
+  var clientsSet = {};
+
+  orders.forEach(function(o) {
+    var earn = orderEarnings(o);
+    totalEarnings += earn;
+    totalAuto += (o.markup_auto || 0);
+
+    var cat = classifyIncoterms(o);
+    byIncoterm[cat].count++;
+    byIncoterm[cat].earnings += earn;
+    byIncoterm[cat].netto += (o.sum_netto||0);
+    byIncoterm[cat].brutto += (o.sum_brutto||0);
+
+    var mk = statsMonthKey(o.date);
+    if (mk) {
+      if (!byMonth[mk.key]) byMonth[mk.key] = { label: mk.label, sortKey: mk.sortKey, earnings: 0, auto: 0 };
+      byMonth[mk.key].earnings += earn;
+      byMonth[mk.key].auto += (o.markup_auto||0);
+    }
+
+    var cl = o.client || "Без клієнта";
+    if (!byClient[cl]) byClient[cl] = { count: 0, earnings: 0 };
+    byClient[cl].count++;
+    byClient[cl].earnings += earn;
+    clientsSet[cl] = true;
+  });
+
+  var monthEntries = Object.keys(byMonth).map(function(k){ return byMonth[k]; }).sort(function(a,b){ return a.sortKey - b.sortKey; });
+  var clientEntries = Object.keys(byClient).map(function(k){ return { name: k, count: byClient[k].count, earnings: byClient[k].earnings }; })
+    .sort(function(a,b){ return b.earnings - a.earnings; });
+  var topClients = clientEntries.slice(0, 8);
+
+  var avgMarkup = totalOrders ? (totalEarnings / totalOrders) : 0;
+  var activeClients = Object.keys(clientsSet).length;
+
+  var html = "";
+
+  // ── Панель вибору періоду ──
+  html += "<div class='toolbar'>"
+    + "<button class='btn " + (!statsDateFrom && !statsDateTo ? "btn-yellow" : "btn-gray") + "' onclick='statsSetPreset(\"all\")'>Весь час</button>"
+    + "<button class='btn btn-gray' onclick='statsSetPreset(\"thisMonth\")'>Цей місяць</button>"
+    + "<button class='btn btn-gray' onclick='statsSetPreset(\"lastMonth\")'>Минулий місяць</button>"
+    + "<button class='btn btn-gray' onclick='statsSetPreset(\"quarter\")'>Останні 3 місяці</button>"
+    + "<span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7280;margin-left:8px'>📅 <input type='date' class='filter-sel' style='padding:5px 8px' value='" + statsDateFrom + "' onchange='statsDateFrom=this.value;renderStatistics()'> — <input type='date' class='filter-sel' style='padding:5px 8px' value='" + statsDateTo + "' onchange='statsDateTo=this.value;renderStatistics()'></span>"
+    + "</div>";
+
+  // ── Загальні картки ──
+  html += "<div class='stats-bar'>"
+    + "<div class='stat-card'><div class='stat-val'>" + totalOrders + "</div><div class='stat-label'>ВСЬОГО ОРДЕРІВ</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + Math.round(totalEarnings).toLocaleString("uk-UA") + "</div><div class='stat-label'>ЗАГАЛЬНИЙ ЗАРОБІТОК</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>$ " + Math.round(avgMarkup).toLocaleString("uk-UA") + "</div><div class='stat-label'>СЕРЕДНЯ НАЦІНКА / ОРДЕР</div></div>"
+    + "<div class='stat-card'><div class='stat-val'>" + activeClients + "</div><div class='stat-label'>КЛІЄНТІВ</div></div>"
+    + "</div>";
+
+  if (!totalOrders) {
+    var hasAnyOrders = (db.orders||[]).length > 0;
+    html += "<div class='empty-state'><div class='empty-icon'>📊</div><div class='empty-text'>" + (hasAnyOrders ? "Немає ордерів за обраний період" : "Немає даних для статистики — додай ордери") + "</div></div>";
+    document.getElementById("main-content").innerHTML = html;
+    return;
+  }
+
+  // ── FOB vs CIF ──
+  html += "<div style='display:grid;grid-template-columns:1fr 1.3fr;gap:16px;margin-bottom:16px'>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>FOB vs CIF</div>"
+    + "<canvas id='chartIncoterms' height='210'></canvas>"
+    + "</div>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>Деталі за умовами поставки</div>"
+    + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
+    + "<th style='color:#6b7280;padding:6px 4px'>УМОВИ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НЕТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>БРУТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ЗАРОБІТОК $</th>"
+    + "</tr></thead><tbody>"
+    + ["FOB","CIF","Інше"].map(function(k){
+        var d = byIncoterm[k];
+        var dot = k==="FOB" ? "#f59e0b" : (k==="CIF" ? "#0e7490" : "#9ca3af");
+        return "<tr><td style='padding:7px 4px'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:"+dot+";margin-right:6px'></span>"+k+"</td>"
+          + "<td style='padding:7px 4px;text-align:right'>"+d.count+"</td>"
+          + "<td style='padding:7px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.netto).toLocaleString("uk-UA")+"</td>"
+          + "<td style='padding:7px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.brutto).toLocaleString("uk-UA")+"</td>"
+          + "<td style='padding:7px 4px;text-align:right;font-weight:700;color:#16a34a'>$ "+Math.round(d.earnings).toLocaleString("uk-UA")+"</td></tr>";
+      }).join("")
+    + "</tbody></table>"
+    + "</div>"
+    + "</div>";
+
+  // ── Заробіток по місяцях ──
+  html += "<div class='table-wrap' style='padding:18px;background:#fff;margin-bottom:16px'>"
+    + "<div class='section-title' style='margin-top:0'>Заробіток по місяцях</div>"
+    + (monthEntries.length ? "<canvas id='chartMonthly' height='90'></canvas>" : "<div style='color:#9ca3af;font-size:13px;padding:10px 0'>Недостатньо дат для графіка</div>")
+    + "</div>";
+
+  // ── Націнка авто окремо ──
+  var ordersWithAuto = orders.filter(function(o){ return (o.markup_auto||0) > 0; }).length;
+  html += "<div style='display:grid;grid-template-columns:1fr 1.6fr;gap:16px;margin-bottom:16px'>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>🚛 Націнка авто окремо</div>"
+    + "<div style='font-size:28px;font-weight:700;color:#f59e0b'>$ " + Math.round(totalAuto).toLocaleString("uk-UA") + "</div>"
+    + "<div style='font-size:11px;color:#9ca3af;letter-spacing:.06em;margin-bottom:10px'>ЗАГАЛОМ ПО ВСІХ ОРДЕРАХ</div>"
+    + "<div style='font-size:12px;color:#6b7280'>Ордерів з націнкою авто: <b>" + ordersWithAuto + "</b> з " + totalOrders + "</div>"
+    + "</div>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>Націнка авто по місяцях</div>"
+    + (monthEntries.length ? "<canvas id='chartAuto' height='90'></canvas>" : "<div style='color:#9ca3af;font-size:13px;padding:10px 0'>Недостатньо дат для графіка</div>")
+    + "</div>"
+    + "</div>";
+
+  // ── По клієнтам ──
+  html += "<div style='display:grid;grid-template-columns:1.3fr 1fr;gap:16px'>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>По клієнтам</div>"
+    + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
+    + "<th style='color:#6b7280;padding:6px 4px'>КЛІЄНТ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ЗАРОБІТОК $</th>"
+    + "</tr></thead><tbody>"
+    + clientEntries.map(function(c){
+        return "<tr><td style='padding:7px 4px;font-weight:600'>"+escQ(c.name)+"</td>"
+          + "<td style='padding:7px 4px;text-align:right'>"+c.count+"</td>"
+          + "<td style='padding:7px 4px;text-align:right;font-weight:700;color:#16a34a'>$ "+Math.round(c.earnings).toLocaleString("uk-UA")+"</td></tr>";
+      }).join("")
+    + "</tbody></table>"
+    + "</div>"
+    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0'>Топ клієнтів</div>"
+    + "<canvas id='chartClients' height='" + Math.max(160, topClients.length*32) + "'></canvas>"
+    + "</div>"
+    + "</div>";
+
+  document.getElementById("main-content").innerHTML = html;
+
+  // ── Ініціалізація графіків (canvas вже в DOM після innerHTML) ──
+  destroyStatsCharts();
+  if (typeof Chart === "undefined") return;
+
+  var AMBER = "#f59e0b", TEAL = "#0e7490", GRAY = "#d1d5db", GREEN = "#16a34a";
+
+  _statsCharts.incoterms = new Chart(document.getElementById("chartIncoterms"), {
+    type: "doughnut",
+    data: {
+      labels: ["FOB", "CIF", "Інше"],
+      datasets: [{ data: [byIncoterm.FOB.earnings, byIncoterm.CIF.earnings, byIncoterm["Інше"].earnings], backgroundColor: [AMBER, TEAL, GRAY], borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { position: "bottom", labels: { font: { size: 11 }, padding: 12 } } }, cutout: "62%" }
+  });
+
+  if (monthEntries.length) {
+    _statsCharts.monthly = new Chart(document.getElementById("chartMonthly"), {
+      type: "line",
+      data: {
+        labels: monthEntries.map(function(m){ return m.label; }),
+        datasets: [{ label: "Заробіток $", data: monthEntries.map(function(m){ return Math.round(m.earnings); }), borderColor: GREEN, backgroundColor: "rgba(22,163,74,.12)", fill: true, tension: 0.3, pointRadius: 3 }]
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } } }
+    });
+
+    _statsCharts.auto = new Chart(document.getElementById("chartAuto"), {
+      type: "bar",
+      data: {
+        labels: monthEntries.map(function(m){ return m.label; }),
+        datasets: [{ label: "Націнка авто $", data: monthEntries.map(function(m){ return Math.round(m.auto); }), backgroundColor: AMBER, borderRadius: 4 }]
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } } }
+    });
+  }
+
+  _statsCharts.clients = new Chart(document.getElementById("chartClients"), {
+    type: "bar",
+    data: {
+      labels: topClients.map(function(c){ return c.name.length>22 ? c.name.substring(0,20)+"…" : c.name; }),
+      datasets: [{ label: "Заробіток $", data: topClients.map(function(c){ return Math.round(c.earnings); }), backgroundColor: TEAL, borderRadius: 4 }]
+    },
+    options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 11 } } } } }
+  });
 }
 
 // ── REFERENCE (Довідник) ─────────────────────────────────────────
