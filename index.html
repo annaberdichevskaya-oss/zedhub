@@ -1908,7 +1908,8 @@ function renderStatistics() {
   var transportEntries = Object.keys(byTransport).map(function(k){ return { name: k, count: byTransport[k].count, earnings: byTransport[k].earnings }; })
     .sort(function(a,b){ return b.earnings - a.earnings; });
 
-  var avgMarkup = totalOrders ? (totalEarnings / totalOrders) : 0;
+  var completeOrders = orders.filter(function(o){ return num(o.markup_auto) > 0 && num(o.markup_local) > 0; });
+  var avgMarkup = completeOrders.length ? (completeOrders.reduce(function(s,o){ return s + orderEarnings(o); }, 0) / completeOrders.length) : 0;
   var activeClients = Object.keys(clientsSet).length;
 
   var html = "";
@@ -1926,7 +1927,7 @@ function renderStatistics() {
   html += "<div class='stats-bar'>"
     + "<div class='stat-card'><div class='stat-val'>" + totalOrders + "</div><div class='stat-label'>ВСЬОГО ОРДЕРІВ</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + Math.round(totalEarnings).toLocaleString("uk-UA") + "</div><div class='stat-label'>ЗАГАЛЬНА НАЦІНКА</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>$ " + Math.round(avgMarkup).toLocaleString("uk-UA") + "</div><div class='stat-label'>СЕРЕДНЯ НАЦІНКА / ОРДЕР</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>$ " + Math.round(avgMarkup).toLocaleString("uk-UA") + "</div><div class='stat-label'>СЕРЕДНЯ НАЦІНКА / ОРДЕР</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>з " + completeOrders.length + " повних ордерів</div></div>"
     + "<div class='stat-card'><div class='stat-val'>" + activeClients + "</div><div class='stat-label'>КЛІЄНТІВ</div></div>"
     + "</div>";
 
