@@ -754,7 +754,7 @@ function renderOrders() {
     return ordSort === "new" ? y.localeCompare(x, undefined, {numeric:true}) : x.localeCompare(y, undefined, {numeric:true});
   });
 
-  var totalMarkup = filtered.reduce(function(s,o){return s+((o.sum_brutto||0)-(o.sum_netto||0));},0);
+  var totalMarkup = filtered.reduce(function(s,o){return s+(num(o.sum_brutto)-num(o.sum_netto))+num(o.markup_auto)+num(o.markup_local);},0);
 
   var execActive = ordManagerSel.length > 0 || ordLogistSel.length > 0;
   var ordersStatVal = execActive
