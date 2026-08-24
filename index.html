@@ -1476,7 +1476,7 @@ var ZED_SUPPORT_EMAIL = "zed.support@ekol.com.ua";
 function sendToLogist(reqId) {
   var r = db.requests.find(function(x){return x.id===reqId;});
   if (!r) return;
-  var subj = encodeURIComponent("запит ставки_" + (r.client||"") + "_" + (r.route||"") + "_" + (r.weight||""));
+  var subj = encodeURIComponent("запит ставки №" + (r.req_num||"") + "_" + (r.client||"") + "_" + (r.route||"") + "_" + (r.weight||""));
   var lines = [
     "Вітаю, прошу надати ставку:",
     "",
