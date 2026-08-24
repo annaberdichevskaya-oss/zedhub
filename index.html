@@ -1890,7 +1890,7 @@ function renderStatistics() {
     if (mk) {
       if (!byMonth[mk.key]) byMonth[mk.key] = { label: mk.label, sortKey: mk.sortKey, earnings: 0, auto: 0 };
       byMonth[mk.key].earnings += earn;
-      byMonth[mk.key].auto += (o.markup_auto||0);
+      byMonth[mk.key].auto += num(o.markup_auto);
     }
 
     var cl = o.client || "Без клієнта";
