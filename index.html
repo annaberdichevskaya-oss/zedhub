@@ -429,7 +429,7 @@ function updateCounts() {
     try {
       var tCount = (db.orders||[]).filter(function(o){
         var d = daysUntil(o.eta);
-        return d !== null && d >= -7 && d <= 10;
+        return d !== null && d >= -10 && d <= 10;
       }).length;
       transitEl.textContent = tCount;
     } catch(e) {}
@@ -1549,7 +1549,7 @@ function renderTransit() {
   var list = (db.orders||[]).filter(function(o) {
     var d = daysUntil(o.eta);
     if (d === null) return false;
-    if (d < -7 || d > 10) return false;
+    if (d < -10 || d > 10) return false;
     return true;
   });
   list.sort(function(a,b){ return daysUntil(a.eta) - daysUntil(b.eta); });
@@ -1565,7 +1565,7 @@ function renderTransit() {
     + "</div>";
 
   html += "<div class='toolbar' style='margin-bottom:6px'>"
-    + "<div style='font-size:12px;color:#6b7280;flex:1'>Всі контейнери з ETA за останні 7 днів або наступні 10 днів. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<div style='font-size:12px;color:#6b7280;flex:1'>Всі контейнери з ETA за останні 10 днів або наступні 10 днів. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
     + "<button class='btn btn-gray' onclick='openUbImport()'>📥 Оновити з UB</button>"
     + "<button class='btn btn-yellow' onclick='openAddTransit()'>+ Додати контейнер</button>"
     + "</div>";
