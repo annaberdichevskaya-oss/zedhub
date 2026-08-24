@@ -176,7 +176,7 @@ var INCOTERMS = ["EXW","FCA","FAS","FOB","CPT","CIP","CFR","CIF","DAP","DPU","DD
 
 var REQ_STATUSES = ["Новий запит","Прораховується","На погодженні","Accepted","Rejected"];
 var MANAGERS = ["—","Оксана К.","Анна Б.","Анна П.","Тетяна Д."];
-var LOGISTS = ["—","Влад В.","Лера К.","Надя Л.","Ден Б.","Таня П.","Герман В."];
+var LOGISTS = ["—","Влад В.","Лера К.","Надя Л.","Ден Б.","Таня П.","Герман В.","International Transportation"];
 var REQ_STATUS_MAP = {
   "Новий запит":"p-new","Прораховується":"p-calc","На погодженні":"p-agree",
   "Accepted":"p-accept","Rejected":"p-reject","Відкладено":"p-delay"
@@ -995,10 +995,10 @@ function createOrder(reqId) {
     req_id: r.req_num||"", date: new Date().toLocaleDateString("uk-UA"),
     incoterms: "", booking: "", carrier: "", container: "", ready_date: r.ready_date||"",
     cutoff: "", route_full: r.route, etd: "", eta: "",
-    bol: "", cargo_status: "TBD", decl: "",
+    cargo_status: "TBD", decl: "",
     customs_pl_status: "TBD", customs_status: "TBD", customs_date: "",
     resort: "TBD", resort_addr: "", resort_comment: "",
-    transport_ua: "", delivery_status: "TBD", delivery_date: "",
+    delivery_status: "TBD", delivery_date: "",
     invoice_sum: (r.sum_brutto||0)-(r.sum_netto||0), sum_netto: r.sum_netto||0, sum_brutto: r.sum_brutto||0, markup_auto: 0, markup_local: 0, payment_status: "TBD",
     docs: r.docs||"", notes: r.comment||"", manager: r.manager||"—", logist: "—"
   };
@@ -1055,7 +1055,6 @@ function showOrderModal(o) {
     + "<div class='field'><label>CUT-OFF</label>" + dateInput("of-cut", isEdit ? (o.cutoff||"") : "") + "</div>"
     + "<div class='field'><label>ETD</label>" + dateInput("of-etd", isEdit ? (o.etd||"") : "") + "</div>"
     + "<div class='field'><label>ETA</label>" + dateInput("of-eta", isEdit ? (o.eta||"") : "") + "</div>"
-    + "<div class='field'><label>КОНОСАМЕНТ</label><input id='of-bol' value='" + escQ(isEdit ? (o.bol||"") : "") + "'></div>"
     + "<div class='field'><label>СТАТУС ВАНТАЖУ</label>" + sel("of-carg", CARGO_STATUSES, isEdit ? o.cargo_status : "TBD") + "</div>"
     + "<div class='field'><label>ДЕКЛАРАЦІЯ №</label><input id='of-decl' value='" + escQ(isEdit ? (o.decl||"") : "") + "'></div>"
     + "</div>"
@@ -1073,7 +1072,6 @@ function showOrderModal(o) {
 
     + "<div class='section-title'>Доставка в Україні</div>"
     + "<div class='form-grid'>"
-    + "<div class='field'><label>ТРАНСПОРТ</label><input id='of-trans' value='" + escQ(isEdit ? (o.transport_ua||"") : "") + "'></div>"
     + "<div class='field'><label>СТАТУС ДОСТАВКИ</label>" + sel("of-deliv", DELIVERY_STATUSES, isEdit ? o.delivery_status : "TBD") + "</div>"
     + "<div class='field'><label>ДАТА ДОСТАВКИ</label>" + dateInput("of-delivdate", isEdit ? (o.delivery_date||"") : "") + "</div>"
     + "</div>"
@@ -1088,8 +1086,7 @@ function showOrderModal(o) {
     + "<div class='field'><label>СТАТУС ОПЛАТИ</label>" + sel("of-pay", PAYMENT_STATUSES, isEdit ? o.payment_status : "TBD") + "</div>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ ПО ОРДЕРУ (OneDrive)</label><input id='of-docs' value='" + escQ(isEdit ? (o.docs||"") : "") + "' placeholder='https://...'></div>"
     + "<div class='field'><label>МЕНЕДЖЕР</label><select id='of-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&o.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
-    + "<div class='field'><label>ЛОГІСТ 1</label><select id='of-logist'>" + LOGISTS.map(function(l){return "<option" + ((isEdit&&o.logist===l)?" selected":"") + ">" + l + "</option>";}).join("") + "</select></div>"
-    + "<div class='field'><label>ЛОГІСТ 2</label><select id='of-logist2'>" + LOGISTS.map(function(l){return "<option" + ((isEdit&&o.logist2===l)?" selected":"") + ">" + l + "</option>";}).join("") + "</select></div>"
+    + "<div class='field'><label>ЛОГІСТ</label><select id='of-logist'>" + LOGISTS.map(function(l){return "<option" + ((isEdit&&o.logist===l)?" selected":"") + ">" + l + "</option>";}).join("") + "</select></div>"
     + "</div>"
     + "<div class='form-grid full'><div class='field'><label>ПРИМІТКИ</label><textarea id='of-notes'>" + escQ(isEdit ? (o.notes||"") : "") + "</textarea></div></div>"
 
@@ -1110,16 +1107,15 @@ function saveOrder(id) {
     booking: gv("of-book"), carrier: gv("of-carr"),
     container: gv("of-cont"), ready_date: fromISODate(gv("of-ready")), cutoff: fromISODate(gv("of-cut")),
     route_full: gv("of-rfull"), incoterm_code: gv("of-incoterm-code"), etd: fromISODate(gv("of-etd")), eta: fromISODate(gv("of-eta")),
-    bol: gv("of-bol"), cargo_status: gv("of-carg"), decl: gv("of-decl"),
+    cargo_status: gv("of-carg"), decl: gv("of-decl"),
     customs_pl_status: gv("of-custpl"), customs_status: gv("of-cust"),
     resort: gv("of-resort"),
-    transport_ua: gv("of-trans"),
     delivery_status: gv("of-deliv"), delivery_date: fromISODate(gv("of-delivdate")),
     sum_netto: parseFloat(gv("of-netto"))||0, sum_brutto: parseFloat(gv("of-brutto"))||0,
     markup_auto: parseFloat(gv("of-markup-auto"))||0, markup_local: parseFloat(gv("of-markup-local"))||0,
     invoice_sum: (num(gv("of-brutto"))-num(gv("of-netto")))+num(gv("of-markup-auto"))+num(gv("of-markup-local")),
     payment_status: gv("of-pay"),
-    docs: gv("of-docs"), notes: gv("of-notes"), manager: gv("of-manager"), logist: gv("of-logist"), logist2: gv("of-logist2")
+    docs: gv("of-docs"), notes: gv("of-notes"), manager: gv("of-manager"), logist: gv("of-logist")
   };
   if (id) {
     var ord = db.orders.find(function(x){return x.id===id;});
