@@ -1938,6 +1938,18 @@ function renderStatistics() {
     .sort(function(a,b){ return b.earnings - a.earnings; });
 
   var completeOrders = orders.filter(function(o){ return num(o.markup_auto) > 0 && num(o.markup_local) > 0; });
+
+  function avgFor(list) {
+    return list.length ? (list.reduce(function(s,o){return s+orderEarnings(o);},0) / list.length) : 0;
+  }
+  var fobComplete = completeOrders.filter(function(o){ return classifyIncoterms(o) === "FOB"; });
+  var cifComplete = completeOrders.filter(function(o){ return classifyIncoterms(o) === "CIF"; });
+  var autoComplete = completeOrders.filter(function(o){ return (o.type||"") === "Авто"; });
+  var avgByCategory = [
+    { label: "FOB", count: fobComplete.length, avg: avgFor(fobComplete), color: "#f59e0b" },
+    { label: "CIF", count: cifComplete.length, avg: avgFor(cifComplete), color: "#0e7490" },
+    { label: "АВТО", count: autoComplete.length, avg: avgFor(autoComplete), color: "#16a34a" }
+  ];
   var avgMarkup = completeOrders.length ? (completeOrders.reduce(function(s,o){ return s + orderEarnings(o); }, 0) / completeOrders.length) : 0;
   var activeClients = Object.keys(clientsSet).length;
 
@@ -1956,7 +1968,7 @@ function renderStatistics() {
   html += "<div class='stats-bar'>"
     + "<div class='stat-card'><div class='stat-val'>" + totalOrders + "</div><div class='stat-label'>ВСЬОГО ОРДЕРІВ</div></div>"
     + "<div class='stat-card'><div class='stat-val' style='color:#16a34a'>$ " + Math.round(totalEarnings).toLocaleString("uk-UA") + "</div><div class='stat-label'>ЗАГАЛЬНА НАЦІНКА</div></div>"
-    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>$ " + Math.round(avgMarkup).toLocaleString("uk-UA") + "</div><div class='stat-label'>СЕРЕДНЯ НАЦІНКА / ОРДЕР</div><div style='font-size:10px;color:#9ca3af;margin-top:2px'>з " + completeOrders.length + " повних ордерів</div></div>"
+    + "<div class='stat-card'><div class='stat-val' style='color:#f59e0b'>$ " + Math.round(avgMarkup).toLocaleString("uk-UA") + "</div><div class='stat-label'>СЕРЕДНЯ НАЦІНКА / ОРДЕР</div></div>"
     + "<div class='stat-card'><div class='stat-val'>" + activeClients + "</div><div class='stat-label'>КЛІЄНТІВ</div></div>"
     + "</div>";
 
@@ -1967,48 +1979,65 @@ function renderStatistics() {
     return;
   }
 
-  // ── Деталі за умовами поставки ──
-  html += "<div class='table-wrap' style='padding:18px;background:#fff;margin-bottom:16px'>"
-    + "<div class='section-title' style='margin-top:0'>Деталі за умовами поставки</div>"
+  // ── Деталі за умовами поставки + По клієнтам (компактно, поруч) ──
+  var clientsForChart = clientEntries.slice(0, 6);
+  var clientsOtherSum = clientEntries.slice(6).reduce(function(s,c){return s+c.earnings;},0);
+  if (clientsOtherSum > 0) clientsForChart = clientsForChart.concat([{name:"Інші", earnings: clientsOtherSum}]);
+
+  html += "<div style='display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-bottom:12px;align-items:start'>"
+    + "<div class='table-wrap' style='padding:14px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0;margin-bottom:8px'>Деталі за умовами поставки</div>"
     + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
-    + "<th style='color:#6b7280;padding:6px 4px'>УМОВИ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НЕТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>БРУТТО $</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НАЦІНКА $</th>"
+    + "<th style='color:#6b7280;padding:5px 4px'>УМОВИ</th><th style='color:#6b7280;padding:5px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:5px 4px;text-align:right'>НЕТТО $</th><th style='color:#6b7280;padding:5px 4px;text-align:right'>БРУТТО $</th><th style='color:#6b7280;padding:5px 4px;text-align:right'>НАЦІНКА $</th>"
     + "</tr></thead><tbody>"
-    + ["FOB","CIF","FCA","EXW","Інше"].map(function(k){
+    + ["FOB","CIF","FCA","EXW","Інше"].filter(function(k){ return byIncoterm[k].count > 0; }).map(function(k){
         var d = byIncoterm[k];
         var dot = k==="FOB" ? "#f59e0b" : (k==="CIF" ? "#0e7490" : (k==="FCA" ? "#6d28d9" : (k==="EXW" ? "#16a34a" : "#9ca3af")));
-        return "<tr><td style='padding:7px 4px'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:"+dot+";margin-right:6px'></span>"+k+"</td>"
-          + "<td style='padding:7px 4px;text-align:right'>"+d.count+"</td>"
-          + "<td style='padding:7px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.netto).toLocaleString("uk-UA")+"</td>"
-          + "<td style='padding:7px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.brutto).toLocaleString("uk-UA")+"</td>"
-          + "<td style='padding:7px 4px;text-align:right;font-weight:700;color:#16a34a'>$ "+Math.round(d.earnings).toLocaleString("uk-UA")+"</td></tr>";
+        return "<tr><td style='padding:6px 4px'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:"+dot+";margin-right:6px'></span>"+k+"</td>"
+          + "<td style='padding:6px 4px;text-align:right'>"+d.count+"</td>"
+          + "<td style='padding:6px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.netto).toLocaleString("uk-UA")+"</td>"
+          + "<td style='padding:6px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.brutto).toLocaleString("uk-UA")+"</td>"
+          + "<td style='padding:6px 4px;text-align:right;font-weight:700;color:#16a34a'>$ "+Math.round(d.earnings).toLocaleString("uk-UA")+"</td></tr>";
       }).join("")
     + "</tbody></table>"
+    + "</div>"
+    + "<div class='table-wrap' style='padding:14px;background:#fff'>"
+    + "<div class='section-title' style='margin-top:0;margin-bottom:8px'>По клієнтам</div>"
+    + "<div style='position:relative;height:200px'><canvas id='chartClients'></canvas></div>"
+    + "<table style='font-size:11px;margin-top:8px'><tbody>"
+    + clientEntries.slice(0,6).map(function(c){
+        return "<tr><td style='padding:3px 4px;font-weight:600'>"+escQ(c.name)+"</td>"
+          + "<td style='padding:3px 4px;text-align:right;color:#6b7280'>"+c.count+" орд.</td>"
+          + "<td style='padding:3px 4px;text-align:right;font-weight:700;color:#16a34a'>$ "+Math.round(c.earnings).toLocaleString("uk-UA")+"</td></tr>";
+      }).join("")
+    + "</tbody></table>"
+    + "</div>"
     + "</div>";
 
-  // ── Націнка по місяцях ──
-  html += "<div class='table-wrap' style='padding:18px;background:#fff;margin-bottom:16px'>"
-    + "<div class='section-title' style='margin-top:0'>Націнка по місяцях</div>"
-    + (monthEntries.length ? "<canvas id='chartMonthly' height='90'></canvas>" : "<div style='color:#9ca3af;font-size:13px;padding:10px 0'>Недостатньо дат для графіка</div>")
+  // ── Середня націнка: FOB / CIF / АВТО ──
+  html += "<div class='table-wrap' style='padding:14px;background:#fff;margin-bottom:12px'>"
+    + "<div class='section-title' style='margin-top:0'>Середня націнка: FOB / CIF / АВТО</div>"
+    + "<canvas id='chartAvgCategory' height='90'></canvas>"
     + "</div>";
 
   // ── Націнка авто окремо ──
   var ordersWithAuto = orders.filter(function(o){ return num(o.markup_auto) > 0; }).length;
-  html += "<div style='display:grid;grid-template-columns:1fr 1.6fr;gap:16px;margin-bottom:16px'>"
-    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+  html += "<div style='display:grid;grid-template-columns:1fr 1.6fr;gap:12px;margin-bottom:12px'>"
+    + "<div class='table-wrap' style='padding:14px;background:#fff'>"
     + "<div class='section-title' style='margin-top:0'>🚛 Націнка авто окремо</div>"
     + "<div style='font-size:28px;font-weight:700;color:#f59e0b'>$ " + Math.round(totalAuto).toLocaleString("uk-UA") + "</div>"
     + "<div style='font-size:11px;color:#9ca3af;letter-spacing:.06em;margin-bottom:10px'>ЗАГАЛОМ ПО ВСІХ ОРДЕРАХ</div>"
     + "<div style='font-size:12px;color:#6b7280'>Ордерів з націнкою авто: <b>" + ordersWithAuto + "</b> з " + totalOrders + "</div>"
     + "</div>"
-    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='table-wrap' style='padding:14px;background:#fff'>"
     + "<div class='section-title' style='margin-top:0'>Націнка авто по місяцях</div>"
     + (monthEntries.length ? "<canvas id='chartAuto' height='90'></canvas>" : "<div style='color:#9ca3af;font-size:13px;padding:10px 0'>Недостатньо дат для графіка</div>")
     + "</div>"
     + "</div>";
 
   // ── По типу перевезення ──
-  html += "<div style='display:grid;grid-template-columns:1fr 1.3fr;gap:16px;margin-bottom:16px'>"
-    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+  html += "<div style='display:grid;grid-template-columns:1fr 1.3fr;gap:12px;margin-bottom:12px'>"
+    + "<div class='table-wrap' style='padding:14px;background:#fff'>"
     + "<div class='section-title' style='margin-top:0'>По типу перевезення</div>"
     + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
     + "<th style='color:#6b7280;padding:6px 4px'>ТИП</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НАЦІНКА $</th>"
@@ -2020,29 +2049,9 @@ function renderStatistics() {
       }).join("")
     + "</tbody></table>"
     + "</div>"
-    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
+    + "<div class='table-wrap' style='padding:14px;background:#fff'>"
     + "<div class='section-title' style='margin-top:0'>Розподіл націнки по типу перевезення</div>"
     + "<canvas id='chartTransport' height='170'></canvas>"
-    + "</div>"
-    + "</div>";
-
-  // ── По клієнтам ──
-  html += "<div style='display:grid;grid-template-columns:1.3fr 1fr;gap:16px'>"
-    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
-    + "<div class='section-title' style='margin-top:0'>По клієнтам</div>"
-    + "<table style='font-size:12px'><thead><tr style='background:transparent'>"
-    + "<th style='color:#6b7280;padding:6px 4px'>КЛІЄНТ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>ОРДЕРІВ</th><th style='color:#6b7280;padding:6px 4px;text-align:right'>НАЦІНКА $</th>"
-    + "</tr></thead><tbody>"
-    + clientEntries.map(function(c){
-        return "<tr><td style='padding:7px 4px;font-weight:600'>"+escQ(c.name)+"</td>"
-          + "<td style='padding:7px 4px;text-align:right'>"+c.count+"</td>"
-          + "<td style='padding:7px 4px;text-align:right;font-weight:700;color:#16a34a'>$ "+Math.round(c.earnings).toLocaleString("uk-UA")+"</td></tr>";
-      }).join("")
-    + "</tbody></table>"
-    + "</div>"
-    + "<div class='table-wrap' style='padding:18px;background:#fff'>"
-    + "<div class='section-title' style='margin-top:0'>Топ клієнтів</div>"
-    + "<canvas id='chartClients' height='" + Math.max(160, topClients.length*32) + "'></canvas>"
     + "</div>"
     + "</div>";
 
@@ -2050,21 +2059,43 @@ function renderStatistics() {
 
   // ── Ініціалізація графіків (canvas вже в DOM після innerHTML) ──
   destroyStatsCharts();
-  if (typeof Chart === "undefined") return;
+  if (typeof Chart === "undefined") {
+    // Chart.js ще не встиг завантажитись з CDN — пробуємо ще раз трохи згодом,
+    // замість того щоб мовчки лишити графіки порожніми
+    setTimeout(function(){ if (currentTab === "statistics") renderStatistics(); }, 400);
+    return;
+  }
 
   var AMBER = "#f59e0b", TEAL = "#0e7490", GRAY = "#d1d5db", GREEN = "#16a34a", PURPLE = "#6d28d9";
 
-  if (monthEntries.length) {
-    _statsCharts.monthly = new Chart(document.getElementById("chartMonthly"), {
-      type: "line",
-      data: {
-        labels: monthEntries.map(function(m){ return m.label; }),
-        datasets: [{ label: "Націнка $", data: monthEntries.map(function(m){ return Math.round(m.earnings); }), borderColor: GREEN, backgroundColor: "rgba(22,163,74,.12)", fill: true, tension: 0.3, pointRadius: 3 }]
-      },
-      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } } }
-    });
+  function safeChart(key, canvasId, config) {
+    try {
+      var el = document.getElementById(canvasId);
+      if (!el) { throw new Error("canvas #" + canvasId + " не знайдено в DOM"); }
+      _statsCharts[key] = new Chart(el, config);
+    } catch (err) {
+      console.error("ZED Hub: помилка графіка " + canvasId + ":", err);
+      var el2 = document.getElementById(canvasId);
+      if (el2 && el2.parentNode) {
+        var msg = document.createElement("div");
+        msg.style.cssText = "color:#dc2626;font-size:11px;font-family:monospace;padding:10px;background:#fef2f2;border-radius:6px";
+        msg.textContent = "⚠️ Графік не побудувався: " + (err && err.message ? err.message : err);
+        el2.parentNode.insertBefore(msg, el2);
+      }
+    }
+  }
 
-    _statsCharts.auto = new Chart(document.getElementById("chartAuto"), {
+  safeChart("avgCategory", "chartAvgCategory", {
+    type: "bar",
+    data: {
+      labels: avgByCategory.map(function(c){ return c.label + " (" + c.count + ")"; }),
+      datasets: [{ label: "Середня націнка $", data: avgByCategory.map(function(c){ return Math.round(c.avg); }), backgroundColor: avgByCategory.map(function(c){ return c.color; }), borderRadius: 4 }]
+    },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 11 } } } } }
+  });
+
+  if (monthEntries.length) {
+    safeChart("auto", "chartAuto", {
       type: "bar",
       data: {
         labels: monthEntries.map(function(m){ return m.label; }),
@@ -2075,7 +2106,7 @@ function renderStatistics() {
   }
 
   var transportColors = { "Море": TEAL, "Авто": AMBER, "Авіа": PURPLE, "Мультимодальне": GREEN, "ЖД": "#dc2626", "Не вказано": GRAY };
-  _statsCharts.transport = new Chart(document.getElementById("chartTransport"), {
+  safeChart("transport", "chartTransport", {
     type: "doughnut",
     data: {
       labels: transportEntries.map(function(t){ return t.name; }),
@@ -2084,13 +2115,14 @@ function renderStatistics() {
     options: { plugins: { legend: { position: "bottom", labels: { font: { size: 11 }, padding: 10 } } }, cutout: "55%" }
   });
 
-  _statsCharts.clients = new Chart(document.getElementById("chartClients"), {
-    type: "bar",
+  var clientPalette = [AMBER, TEAL, PURPLE, GREEN, "#dc2626", "#2563eb", GRAY];
+  safeChart("clients", "chartClients", {
+    type: "doughnut",
     data: {
-      labels: topClients.map(function(c){ return c.name.length>22 ? c.name.substring(0,20)+"…" : c.name; }),
-      datasets: [{ label: "Націнка $", data: topClients.map(function(c){ return Math.round(c.earnings); }), backgroundColor: TEAL, borderRadius: 4 }]
+      labels: clientsForChart.map(function(c){ return c.name.length>20 ? c.name.substring(0,18)+"…" : c.name; }),
+      datasets: [{ data: clientsForChart.map(function(c){ return Math.round(c.earnings); }), backgroundColor: clientPalette.slice(0, clientsForChart.length), borderWidth: 0 }]
     },
-    options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 11 } } } } }
+    options: { maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } }, cutout: "55%" }
   });
 }
 
