@@ -428,8 +428,11 @@ function updateCounts() {
   if (transitEl) {
     try {
       var tCount = (db.orders||[]).filter(function(o){
-        var d = daysUntil(o.eta);
-        return d !== null && d >= -10 && d <= 10;
+        var d1 = daysUntil(o.eta);
+        var d2 = daysUntil(o.eta_plan);
+        var in1 = d1 !== null && d1 >= -10 && d1 <= 10;
+        var in2 = d2 !== null && d2 >= -10 && d2 <= 10;
+        return in1 || in2;
       }).length;
       transitEl.textContent = tCount;
     } catch(e) {}
@@ -469,6 +472,9 @@ function restoreBackup(file) {
 
 // ── Current tab ──────────────────────────────────────────────────
 var currentTab = "requests";
+var transitCustomsFilter = "";
+var transitDateFrom = "";
+var transitDateTo = "";
 var reqSearch = "";
 var reqSort = "new";
 var reqFilter = "";
@@ -715,6 +721,7 @@ function buildCompactOrders(filtered) {
     if (expanded) {
       html += "<div style='border-top:1px solid #f3f4f6;padding:10px 12px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start'>"
         + compactStatusSel("ДОСТАВКА", o.id, "updateDeliveryStatus", DELIVERY_STATUSES, o.delivery_status||"TBD", delivClsC)
+        + compactStatusSel("МИТНИЦЯ", o.id, "updateCustomsUa", CUSTOMS_STATUSES, o.customs_status||"TBD", custCls)
         + "<div><div style='font-size:10px;color:#9ca3af;margin-bottom:2px'>БУКІНГ</div><div style='font-size:12px'>" + escQ(o.booking||"—") + "</div></div>"
         + "<div><div style='font-size:10px;color:#9ca3af;margin-bottom:2px'>CUT-OFF</div><div style='font-size:12px;color:#ef4444;font-weight:600'>" + escQ(fmtDate(o.cutoff)||"—") + "</div></div>"
         + "<div><div style='font-size:10px;color:#9ca3af;margin-bottom:2px'>ГОТОВНІСТЬ</div><div style='font-size:12px;color:#0e7490'>" + escQ(fmtDate(o.ready_date)||"—") + "</div></div>"
@@ -828,7 +835,7 @@ function renderOrders() {
     + "<th style='width:30px;text-align:center'><input type='checkbox' " + (allChecked?"checked":"") + " onchange='toggleAllOrders(this.checked)'></th>"
     + "<th>ORDER ID</th><th class='col-client'>КЛІЄНТ / МАРШРУТ</th>"
     + "<th>БУКІНГ / КОНТЕЙНЕР</th><th>ГОТОВНІСТЬ</th><th>CUT-OFF</th>"
-    + "<th>ETD</th><th>ETA</th><th>ДОСТАВКА</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
+    + "<th>ETD</th><th>ETA</th><th>ДОСТАВКА</th><th>МИТНИЦЯ</th><th>МЕНЕДЖЕР / ЛОГІСТ</th><th class='col-sum'>НАЦІНКА $</th><th>📁</th><th>✉️</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   filtered.forEach(function(o) {
@@ -843,6 +850,7 @@ function renderOrders() {
       + "<td style='font-size:11px'>" + escQ(fmtDate(o.etd)||"—") + "</td>"
       + "<td style='font-size:11px;color:#16a34a'>" + escQ(fmtDate(o.eta)||"—") + "</td>"
       + "<td>" + delivPill(o.delivery_status) + "</td>"
+      + "<td>" + custPill(o.customs_status) + "</td>"
       + "<td><div style='display:flex;flex-direction:column;gap:3px'>"
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer' title='Менеджер' onchange='updateOrdManager(" + o.id + ",this.value)'>" + MANAGERS.map(function(m){return "<option" + ((o.manager||"—")===m?" selected":"") + ">" + m + "</option>";}).join("") + "</select>"
       + "<select style='font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid #dbeafe;background:#f0f7ff;cursor:pointer' title='Логіст' onchange='updateOrdLogist(" + o.id + ",this.value)'>" + LOGISTS.map(function(l){return "<option" + ((o.logist||"—")===l?" selected":"") + ">" + l + "</option>";}).join("") + "</select>"
@@ -1546,13 +1554,27 @@ function nearBorderOrCustoms(status) {
 }
 
 function renderTransit() {
+  var usingCustomRange = transitDateFrom || transitDateTo;
   var list = (db.orders||[]).filter(function(o) {
-    var d = daysUntil(o.eta);
-    if (d === null) return false;
-    if (d < -10 || d > 10) return false;
+    if (usingCustomRange) {
+      var inR1 = inDateRange(o.eta, transitDateFrom, transitDateTo);
+      var inR2 = inDateRange(o.eta_plan, transitDateFrom, transitDateTo);
+      if (!inR1 && !inR2) return false;
+    } else {
+      var d1 = daysUntil(o.eta);
+      var d2 = daysUntil(o.eta_plan);
+      var inWin1 = d1 !== null && d1 >= -10 && d1 <= 10;
+      var inWin2 = d2 !== null && d2 >= -10 && d2 <= 10;
+      if (!inWin1 && !inWin2) return false;
+    }
+    if (transitCustomsFilter && (o.customs_status||"TBD") !== transitCustomsFilter) return false;
     return true;
   });
-  list.sort(function(a,b){ return daysUntil(a.eta) - daysUntil(b.eta); });
+  list.sort(function(a,b){
+    var da = daysUntil(a.eta); if (da === null) da = daysUntil(a.eta_plan);
+    var db2 = daysUntil(b.eta); if (db2 === null) db2 = daysUntil(b.eta_plan);
+    return (da===null?999:da) - (db2===null?999:db2);
+  });
 
   var resortDone = list.filter(function(o){return o.resort==="Завершено";}).length;
   var resortProgress = list.filter(function(o){return o.resort==="В процесі";}).length;
@@ -1565,7 +1587,13 @@ function renderTransit() {
     + "</div>";
 
   html += "<div class='toolbar' style='margin-bottom:6px'>"
-    + "<div style='font-size:12px;color:#6b7280;flex:1'>Всі контейнери з ETA за останні 10 днів або наступні 10 днів. <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<div style='font-size:12px;color:#6b7280;flex:1'>" + (usingCustomRange ? "Показано за обраним періодом." : "Всі контейнери з ETA за останні 10 днів або наступні 10 днів.") + " <span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;vertical-align:middle;margin:0 3px'></span> — наближається до кордону/митниці.</div>"
+    + "<select class='filter-sel' onchange='transitCustomsFilter=this.value;renderTransit()'>"
+    + "<option value=''>🛃 Всі статуси митниці</option>"
+    + CUSTOMS_STATUSES.map(function(s){return "<option value='" + s + "'" + (transitCustomsFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
+    + "</select>"
+    + "<span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7280'>📅 <input type='date' class='filter-sel' style='padding:5px 8px' value='" + transitDateFrom + "' onchange='transitDateFrom=this.value;renderTransit()'> — <input type='date' class='filter-sel' style='padding:5px 8px' value='" + transitDateTo + "' onchange='transitDateTo=this.value;renderTransit()'></span>"
+    + (usingCustomRange ? "<button class='btn btn-gray' onclick='transitDateFrom=\"\";transitDateTo=\"\";renderTransit()'>Скинути період</button>" : "")
     + "<button class='btn btn-gray' onclick='openUbImport()'>📥 Оновити з UB</button>"
     + "<button class='btn btn-yellow' onclick='openAddTransit()'>+ Додати контейнер</button>"
     + "</div>";
@@ -1577,7 +1605,7 @@ function renderTransit() {
   }
 
   html += "<div class='table-wrap'><table class='no-sticky'><thead><tr>"
-    + "<th class='col-client'>ОРДЕР / КЛІЄНТ</th><th>КОНТЕЙНЕР / ПОСТАЧАЛЬНИК</th><th>ETA</th><th>АВТО / СТАТУС</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th><th>📁</th><th>ДІЇ</th>"
+    + "<th class='col-client'>ОРДЕР / КЛІЄНТ</th><th>КОНТЕЙНЕР / ПОСТАЧАЛЬНИК</th><th>ETA</th><th>АВТО / СТАТУС</th><th>МИТНИЦЯ</th><th>ПЕРЕТАРКА</th><th>МЕНЕДЖЕР</th><th>📁</th><th>ДІЇ</th>"
     + "</tr></thead><tbody>";
 
   list.forEach(function(o) {
@@ -1586,8 +1614,9 @@ function renderTransit() {
     html += "<tr>"
       + "<td class='col-client'>" + (nearBorderOrCustoms(o.ub_status) ? "<span title='Наближається до кордону/митниці' style='display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;margin-right:5px'></span>" : "") + "<span class='order-id'>" + escQ(o.order_id) + "</span><div style='font-size:11px;color:#6b7280'>" + escQ(o.client||"") + "</div></td>"
       + "<td style='font-family:monospace;font-size:11px'>" + escQ(o.container||"—") + (function(){var s=extractSupplier(o);return s?"<div style='font-family:-apple-system,sans-serif;font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px'>"+escQ(s)+"</div>":"";})() + "</td>"
-      + "<td style='font-size:12px;font-weight:600;color:" + etaColor + "'>" + escQ(fmtDate(o.eta)) + "</td>"
+      + "<td style='font-size:12px'><div style='font-weight:600;color:" + etaColor + "'>" + escQ(fmtDate(o.eta)||"—") + "</div>" + (o.eta_plan && fmtDate(o.eta_plan)!==fmtDate(o.eta) ? "<div style='font-size:10px;color:#9ca3af'>план: " + escQ(fmtDate(o.eta_plan)) + "</div>" : "") + "</td>"
       + "<td style='max-width:220px'>" + (o.ub_status ? "<div style='font-size:12px;color:#374151'>" + escQ(o.ub_status) + "</div>" : "") + (o.load_date_pl_ua ? "<div style='font-size:10px;color:#0e7490'>📦 завант. PL/UA: " + escQ(o.load_date_pl_ua) + "</div>" : "") + (o.truck_info ? "<div style='font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>🚛 " + escQ(o.truck_info) + "</div>" : (!o.ub_status && !o.load_date_pl_ua ? "<span style='color:#d1d5db'>—</span>" : "")) + "</td>"
+      + "<td>" + custPill(o.customs_status) + "</td>"
       + "<td>" + resortPillTransit(o.resort||"TBD") + "</td>"
       + "<td style='font-size:12px'>" + (function(){var mg=extractManagerDisplay(o);return mg.raw ? "<span style='color:#9ca3af;font-style:italic' title='Взято з приміток, не підтверджено'>" + escQ(mg.text) + " ?</span>" : escQ(mg.text);})() + "</td>"
       + "<td style='text-align:center'>" + (o.docs ? "<a href='" + safeDocUrl(o.docs) + "' target='_blank' style='color:#f59e0b;font-size:16px;text-decoration:none'>📁</a>" : "<span style='color:#d1d5db'>—</span>") + "</td>"
@@ -1738,9 +1767,10 @@ function runUbImport() {
         var auto = ubCellText(r[UB_COLS.auto]);
         var status = ubCellText(r[UB_COLS.status]);
         var supplier = ubCellText(r[UB_COLS.supplier]);
-        if (!eta && !loadDate && !auto && !status && !supplier) continue;
+        if (!eta && !etaPlan && !loadDate && !auto && !status && !supplier) continue;
         var entry = {};
         if (eta) entry.eta = eta;
+        if (etaPlan) entry.eta_plan = etaPlan;
         if (loadDate) entry.load_date_pl_ua = loadDate;
         if (auto) entry.truck_info = auto;
         if (status) entry.ub_status = status;
@@ -1778,6 +1808,7 @@ async function applyUbUpdates(parsed) {
     if (!o) { notFound.push(cont); continue; }
     var changes = [];
     if (upd.eta && o.eta !== upd.eta) { changes.push("ETA:" + (o.eta||"—") + "→" + upd.eta); o.eta = upd.eta; }
+    if (upd.eta_plan && o.eta_plan !== upd.eta_plan) { changes.push("ETA план:" + upd.eta_plan); o.eta_plan = upd.eta_plan; }
     if (upd.load_date_pl_ua && o.load_date_pl_ua !== upd.load_date_pl_ua) { changes.push("завант:" + upd.load_date_pl_ua); o.load_date_pl_ua = upd.load_date_pl_ua; }
     if (upd.truck_info && o.truck_info !== upd.truck_info) { changes.push("авто оновлено"); o.truck_info = upd.truck_info; }
     if (upd.ub_status && o.ub_status !== upd.ub_status) { changes.push("статус:" + upd.ub_status); o.ub_status = upd.ub_status; }
