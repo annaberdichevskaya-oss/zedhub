@@ -578,7 +578,7 @@ function renderRequests() {
     html += "<tr class='" + (r.status==="Accepted"?"highlight":"") + "'>"
       + "<td><span style='font-family:monospace;font-size:11px;color:#374151'>" + escQ(r.req_num||"—") + "</span></td>"
       + "<td style='color:#6b7280;font-size:11px'>" + escQ(r.date||"") + "</td>"
-      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + escQ(r.client) + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(r.contact||"") + "</div>" + (r.supplier ? "<div style='font-size:10px;color:#9ca3af'>🏭 " + escQ(r.supplier) + "</div>" : "") + "</td>"
+      + "<td class='col-client'><div style='font-weight:600;font-size:12px'>" + escQ(r.client) + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(r.client_contact||"") + "</div>" + (r.supplier ? "<div style='font-size:10px;color:#9ca3af'>🏭 " + escQ(r.supplier) + "</div>" : "") + "</td>"
       + "<td class='col-route'><div style='font-size:12px'>" + escQ(r.route) + "</div><div style='font-size:10px'><span class='tag'>" + escQ(r.type||"") + "</span></div></td>"
       + "<td><div style='font-size:12px'>" + escQ(r.cargo||"—") + "</div><div style='font-size:10px;color:#9ca3af'>" + escQ(r.weight||"") + "</div></td>"
       + "<td style='font-size:11px;color:#0e7490'>" + escQ(fmtDate(r.ready_date)||"—") + "</td>"
@@ -903,7 +903,8 @@ function showRequestModal(r) {
     + "<div class='field'><label>№ ЗАПИТУ</label><input id='rf-num' value='" + escQ(num) + "'></div>"
     + "<div class='field'><label>КЛІЄНТ *</label><input id='rf-client' list='rf-client-list' value='" + escQ(isEdit ? (r.client||"") : "") + "' placeholder='Почни вводити або впиши нового'><datalist id='rf-client-list'>" + (db.clients||[]).map(function(c){return "<option value='" + escQ(c.name) + "'>";}).join("") + "</datalist></div>"
     + "<div class='field'><label>ПОСТАЧАЛЬНИК</label><input id='rf-supplier' list='rf-supplier-list' value='" + escQ(isEdit ? (r.supplier||"") : "") + "'><datalist id='rf-supplier-list'>" + (function(){var s={};(db.orders||[]).forEach(function(o){if(o.supplier)s[o.supplier]=1;});return Object.keys(s).map(function(n){return "<option value='" + escQ(n) + "'>";}).join("");})() + "</datalist></div>"
-    + "<div class='field'><label>КОНТАКТ</label><input id='rf-contact' value='" + escQ(isEdit ? (r.contact||"") : "") + "'></div>"
+    + "<div class='field'><label>КОНТАКТ КЛІЄНТА</label><input id='rf-client-contact' value='" + escQ(isEdit ? (r.client_contact||"") : "") + "'></div>"
+    + "<div class='field'><label>КОНТАКТ ПОСТАЧАЛЬНИКА</label><input id='rf-contact' value='" + escQ(isEdit ? (r.contact||"") : "") + "'></div>"
     + "<div class='field'><label>МАРШРУТ</label><input id='rf-route' value='" + escQ(isEdit ? r.route : "") + "'></div>"
     + "<div class='field'><label>ТИП ПЕРЕВЕЗЕННЯ</label><select id='rf-type'>"
     + TRANSPORT_TYPES.map(function(t){return "<option" + ((isEdit&&r.type===t)?" selected":"") + ">" + t + "</option>";}).join("")
@@ -924,6 +925,7 @@ function showRequestModal(r) {
     + REQ_STATUSES.map(function(s){return "<option" + ((isEdit&&r.status===s)?" selected":"") + ">" + s + "</option>";}).join("")
     + "</select></div>"
     + "<div class='field'><label>МЕНЕДЖЕР</label><select id='rf-manager'>" + MANAGERS.map(function(m){return "<option" + ((isEdit&&r.manager===m)?" selected":"") + ">" + m + "</option>";}).join("") + "</select></div>"
+    + "<div class='field'><label>ЛОГІСТ</label><select id='rf-logist'>" + LOGISTS.map(function(l){return "<option" + ((isEdit&&r.logist===l)?" selected":"") + ">" + l + "</option>";}).join("") + "</select></div>"
     + "</div>"
     + "<div class='form-grid full'>"
     + "<div class='field'><label>📁 ДОКУМЕНТИ КЛІЄНТА (OneDrive)</label><input id='rf-docs' value='" + escQ(isEdit ? (r.docs||"") : "") + "' placeholder='https://...'></div>"
@@ -942,10 +944,10 @@ function saveRequest(id) {
   if (!client) { alert("Введіть клієнта"); return; }
   var data = {
     req_num: gv("rf-num"), client: client, supplier: gv("rf-supplier"),
-    contact: gv("rf-contact"), route: gv("rf-route"), type: gv("rf-type"),
+    client_contact: gv("rf-client-contact"), contact: gv("rf-contact"), route: gv("rf-route"), type: gv("rf-type"),
     cargo: gv("rf-cargo"), weight: gv("rf-weight"), ready_date: fromISODate(gv("rf-ready")),
     sum_netto: parseFloat(gv("rf-netto"))||0, sum_brutto: parseFloat(gv("rf-brutto"))||0, markup: (parseFloat(gv("rf-brutto"))||0)-(parseFloat(gv("rf-netto"))||0),
-    status: gv("rf-status"), manager: gv("rf-manager"),
+    status: gv("rf-status"), manager: gv("rf-manager"), logist: gv("rf-logist"),
     docs: gv("rf-docs"), comment: gv("rf-comment")
   };
   if (id) {
@@ -1347,10 +1349,10 @@ function exportRequestsExcel() {
     return matchQ && matchF && matchD;
   }).map(function(r){
     return {
-      "№ Запиту": r.req_num||"", "Дата": r.date||"", "Клієнт": r.client||"", "Контакт": r.contact||"",
+      "№ Запиту": r.req_num||"", "Дата": r.date||"", "Клієнт": r.client||"", "Контакт клієнта": r.client_contact||"", "Постачальник": r.supplier||"", "Контакт постачальника": r.contact||"",
       "Маршрут": r.route||"", "Тип": r.type||"", "Вантаж": r.cargo||"", "Вага/Обсяг": r.weight||"",
       "Дата готовності": r.ready_date||"", "Нетто $": r.sum_netto||0, "Брутто $": r.sum_brutto||0,
-      "Націнка $": (r.sum_brutto||0)-(r.sum_netto||0), "Статус": r.status||"", "Менеджер": r.manager||"", "Коментар": r.comment||""
+      "Націнка $": (r.sum_brutto||0)-(r.sum_netto||0), "Статус": r.status||"", "Менеджер": r.manager||"", "Логіст": r.logist||"", "Коментар": r.comment||""
     };
   });
   if (!rows.length) { alert("Немає запитів для експорту"); return; }
@@ -1490,13 +1492,16 @@ function sendToLogist(reqId) {
     "",
     "№ Запиту: " + (r.req_num||"—"),
     "Клієнт: " + (r.client||"—"),
-    "Контакт: " + (r.contact||"—"),
+    "Контакт клієнта: " + (r.client_contact||"—"),
+    "Постачальник: " + (r.supplier||"—"),
+    "Контакт постачальника: " + (r.contact||"—"),
     "Маршрут: " + (r.route||"—"),
     "Тип перевезення: " + (r.type||"—"),
     "Вантаж: " + (r.cargo||"—"),
     "Вага / обсяг / місця: " + (r.weight||"—"),
     "Дата готовності вантажу: " + (r.ready_date||"—"),
     "Менеджер: " + (r.manager||"—"),
+    "Логіст: " + (r.logist||"—"),
     (r.comment ? "\nКоментар: " + r.comment : ""),
     "",
     "Дякую!"
