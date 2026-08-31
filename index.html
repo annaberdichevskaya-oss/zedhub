@@ -2108,8 +2108,17 @@ var refSearch = "";
 
 function refIcon(title) {
   var t = String(title||"").toLowerCase();
+  // Специфічні інструменти екосистеми (перевіряємо перед загальними правилами)
+  if (t.indexOf("insurance")>=0 || t.indexOf("страхов")>=0) return "🛡";
+  if (t.indexOf("cmr")>=0) return "🚚";
+  if (t.indexOf("checker")>=0 || t.indexOf("check")>=0 || t.indexOf("перевір")>=0) return "🔍";
+  if (t.indexOf("creator")>=0 || t.indexOf("ai agent")>=0 || t.indexOf("агент")>=0) return "🤖";
+  if (t.indexOf("eta")>=0 || t.indexOf("порівн")>=0 || t.indexOf("comparison")>=0) return "📅";
+  if (t.indexOf("portal")>=0 || t.indexOf("портал")>=0 || t.indexOf("customer")>=0) return "🌐";
+  if (t.indexOf("прототип")>=0 || t.indexOf("prototype")>=0) return "🧪";
+  if (t.indexOf("інструкц")>=0 || t.indexOf("instruction")>=0 || t.indexOf("внутр")>=0) return "📋";
+  // Загальна логістична/офісна термінологія
   if (t.indexOf("митниц")>=0 || t.indexOf("брокер")>=0) return "🛃";
-  if (t.indexOf("страхов")>=0) return "🛡";
   if (t.indexOf("банк")>=0 || t.indexOf("рахун")>=0 || t.indexOf("оплат")>=0) return "🏦";
   if (t.indexOf("договір")>=0 || t.indexOf("контракт")>=0) return "📝";
   if (t.indexOf("телефон")>=0 || t.indexOf("контакт")>=0 || t.indexOf("дзвін")>=0) return "📞";
@@ -2117,10 +2126,10 @@ function refIcon(title) {
   if (t.indexOf("порт")>=0 || t.indexOf("термінал")>=0) return "⚓";
   if (t.indexOf("склад")>=0) return "🏭";
   if (t.indexOf("адрес")>=0 || t.indexOf("локац")>=0) return "📍";
-  if (t.indexOf("cmr")>=0 || t.indexOf("накладн")>=0 || t.indexOf("інвойс")>=0 || t.indexOf("документ")>=0) return "📄";
-  if (t.indexOf("правил")>=0 || t.indexOf("інструкц")>=0) return "📋";
+  if (t.indexOf("накладн")>=0 || t.indexOf("інвойс")>=0 || t.indexOf("документ")>=0) return "📄";
+  if (t.indexOf("правил")>=0) return "📋";
   if (t.indexOf("митна декларац")>=0 || t.indexOf("вмд")>=0) return "🧾";
-  return "📌";
+  return "🔗";
 }
 
 function renderReference() {
