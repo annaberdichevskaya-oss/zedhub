@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Звірка ETA (Гарні Речі) з UB</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:1000px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;color:#6b7280;margin-bottom:4px;font-weight:600}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:14px;display:none}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #f3f4f6}
+th{background:#1a1a2e;color:#fff;font-size:10px;letter-spacing:.05em}
+.mismatch{background:#fef2f2}
+.match{color:#16a34a}
+.warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📅 ZED <span>HUB</span> — звірка ETA "Гарні Речі" з UB</h1>
+  <p>Бере всі ордери клієнта "Гарні Речі" з бази, звіряє поточну ETA в ZED Hub з <b>плановою</b> і <b>фактичною</b> ETA у файлі UB. Нічого не змінює — тільки показує розбіжності.</p>
+  <div class="field">
+    <label>ФАЙЛ UB.xlsx</label>
+    <input type="file" id="f-file" accept=".xlsx,.xls">
+  </div>
+  <button class="btn btn-yellow" id="run-btn" onclick="run()">Порівняти</button>
+  <p id="summary" style="margin-top:10px;font-weight:600"></p>
+  <table id="tbl">
+    <thead><tr><th>ORDER ID</th><th>КОНТЕЙНЕР</th><th>ETA в ZED HUB</th><th>ETA ПЛАН (UB)</th><th>ETA ФАКТ (UB)</th><th>СТАТУС</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};}
+function esc(s){ return String(s||"").replace(/</g,"&lt;"); }
+function norm(s){ return String(s||"").trim().toUpperCase(); }
+
+function isGarniRechi(name) {
+  var n = String(name||"").toLowerCase().replace(/тов|фоп/g,"").replace(/[«»"'"„”]/g,"").replace(/\s+/g," ").trim();
+  return n === "гарні речі";
+}
+
+function ubCellText(v) {
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) {
+    var d = v.getDate(), m = v.getMonth()+1, y = v.getFullYear();
+    return (d<10?"0":"")+d+"."+(m<10?"0":"")+m+"."+y;
+  }
+  return String(v).trim();
+}
+
+function run(){
+  var fileInp = document.getElementById("f-file");
+  var file = fileInp && fileInp.files && fileInp.files[0];
+  if (!file) { alert("Обери файл UB.xlsx"); return; }
+  document.getElementById("run-btn").disabled = true;
+  var reader = new FileReader();
+  reader.onload = function(e){ process(e.target.result); };
+  reader.readAsArrayBuffer(file);
+}
+
+async function process(arrayBuffer){
+  try {
+    var wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    var sheetName = null;
+    for (var s=0; s<wb.SheetNames.length; s++){
+      if (wb.SheetNames[s].toLowerCase().replace(/\s/g,"").indexOf("fcl")>=0){ sheetName = wb.SheetNames[s]; break; }
+    }
+    if (!sheetName) { alert("Аркуш FCL не знайдено в файлі."); document.getElementById("run-btn").disabled=false; return; }
+    var ws = wb.Sheets[sheetName];
+    var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true, cellDates: true });
+
+    var ubMap = {};
+    for (var i=1; i<rows.length; i++){
+      var r = rows[i];
+      if (!r || !r[4]) continue;
+      var cont = norm(r[4]);
+      var plan = ubCellText(r[16]);
+      var fact = ubCellText(r[17]);
+      if (!plan && !fact) continue;
+      ubMap[cont] = { plan: plan, fact: fact };
+    }
+
+    var res = await fetch(SUPA_BASE + "/orders?select=id,data&limit=10000", { headers: headers() });
+    var supaRows = await res.json();
+    var orders = Array.isArray(supaRows) ? supaRows.map(function(r){ var d=r.data||{}; d.id=r.id; return d; }) : [];
+
+    var garni = orders.filter(function(o){ return isGarniRechi(o.client) && o.container && String(o.container).trim(); });
+
+    var matched=0, mismatched=0, notInUB=0;
+    var tbody = document.getElementById("tbody");
+    garni.sort(function(a,b){ return String(a.order_id).localeCompare(String(b.order_id), undefined, {numeric:true}); });
+
+    garni.forEach(function(o){
+      var cont = norm(o.container);
+      var ub = ubMap[cont];
+      var zedEta = o.eta || "—";
+      var tr = document.createElement("tr");
+      var status, cls="";
+      if (!ub) {
+        status = "не знайдено в UB"; notInUB++;
+      } else {
+        var ubBest = ub.fact || ub.plan;
+        if (zedEta !== "—" && ubBest && zedEta === ubBest) { status = "✅ збігається"; matched++; }
+        else { status = "⚠️ розбіжність"; cls="mismatch"; mismatched++; }
+      }
+      tr.className = cls;
+      tr.innerHTML = "<td><b>" + esc(o.order_id) + "</b></td><td>" + esc(o.container) + "</td><td>" + esc(zedEta) + "</td><td>" + esc(ub?ub.plan:"—") + "</td><td>" + esc(ub?ub.fact:"—") + "</td><td>" + status + "</td>";
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("summary").textContent = "Гарні Речі — ордерів з контейнером: " + garni.length + " | Збігається: " + matched + " | Розбіжність: " + mismatched + " | Не знайдено в UB: " + notInUB;
+    document.getElementById("tbl").style.display = garni.length ? "table" : "none";
+  } catch (err) {
+    alert("Помилка: " + err.message);
+  }
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
