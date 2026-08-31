@@ -1947,9 +1947,9 @@ function renderStatistics() {
   function avgFor(list) {
     return list.length ? (list.reduce(function(s,o){return s+orderEarnings(o);},0) / list.length) : 0;
   }
-  var fobComplete = completeOrders.filter(function(o){ return classifyIncoterms(o) === "FOB"; });
-  var cifComplete = completeOrders.filter(function(o){ return classifyIncoterms(o) === "CIF"; });
-  var autoComplete = completeOrders.filter(function(o){ return classifyIncoterms(o) === "FCA"; });
+  var fobComplete = orders.filter(function(o){ return classifyIncoterms(o) === "FOB"; });
+  var cifComplete = orders.filter(function(o){ return classifyIncoterms(o) === "CIF"; });
+  var autoComplete = orders.filter(function(o){ return classifyIncoterms(o) === "FCA"; });
   var avgByCategory = [
     { label: "FOB", count: fobComplete.length, avg: avgFor(fobComplete), color: "#f59e0b" },
     { label: "CIF", count: cifComplete.length, avg: avgFor(cifComplete), color: "#0e7490" },
