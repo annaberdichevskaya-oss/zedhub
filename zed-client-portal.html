@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Відстеження вантажу — Еколь Логістікс</title>
+<style>
+:root{
+  --navy:#132036;
+  --navy-2:#1c2d4a;
+  --paper:#F7F5F1;
+  --card:#FFFFFF;
+  --amber:#E8873A;
+  --sea:#2E6E75;
+  --ink:#1a1a2e;
+  --ink-soft:#5b6472;
+  --line:#E7E3DB;
+  --ok:#2E7D4F;
+  --wait:#B98A2F;
+  --alert:#C24C3D;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--paper);
+  font-family:'Iowan Old Style','Georgia',serif;
+  color:var(--ink);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+.sans{font-family:'Charter','Helvetica Neue',Arial,sans-serif}
+.mono{font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace}
+
+header{
+  background:var(--navy);
+  padding:22px 18px 26px;
+  color:#fff;
+}
+.hd-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.hd-brand{font-size:13px;letter-spacing:.02em;color:#9aa6bb}
+.hd-brand b{color:#fff;font-weight:700}
+.hd-portal{font-size:11px;color:var(--amber);text-align:right}
+.hd-title{font-size:26px;font-weight:400;line-height:1.25;max-width:340px}
+.hd-sub{font-family:'Charter',sans-serif;font-size:13px;color:#9aa6bb;margin-top:8px;max-width:320px;line-height:1.5}
+
+.picker{
+  padding:16px 18px 0;
+  max-width:520px;margin:0 auto;
+}
+.picker-label{font-family:'Charter',sans-serif;font-size:11px;color:var(--ink-soft);margin-bottom:8px}
+.picker-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.chip{
+  flex-shrink:0;
+  border:1px solid var(--line);background:#fff;border-radius:20px;
+  padding:8px 16px;font-family:'Charter',sans-serif;font-size:13px;cursor:pointer;color:var(--ink-soft);
+  white-space:nowrap;
+}
+.chip.active{background:var(--navy);border-color:var(--navy);color:#fff}
+
+main{max-width:520px;margin:0 auto;padding:20px 18px 60px}
+
+.stage-card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:22px 20px;
+  margin-bottom:18px;
+}
+.stage-eyebrow{font-family:'Charter',sans-serif;font-size:11px;color:var(--ink-soft);margin-bottom:6px}
+.stage-order{font-size:13px;color:var(--ink-soft);margin-bottom:2px}
+.stage-order .mono{color:var(--ink);font-weight:600;font-size:14px}
+.stage-now{font-size:22px;font-weight:400;margin:10px 0 4px;color:var(--navy)}
+.stage-eta{font-family:'Charter',sans-serif;font-size:13px;color:var(--ink-soft)}
+.stage-eta b{color:var(--ink)}
+
+.route{
+  display:flex;align-items:center;gap:0;margin:20px 0 4px;
+}
+.route-pt{display:flex;flex-direction:column;align-items:center;flex:0 0 auto;width:64px}
+.route-dot{width:11px;height:11px;border-radius:50%;background:var(--line);border:2px solid var(--line)}
+.route-dot.done{background:var(--sea);border-color:var(--sea)}
+.route-dot.now{background:var(--amber);border-color:var(--amber);width:14px;height:14px}
+.route-name{font-family:'Charter',sans-serif;font-size:10.5px;color:var(--ink-soft);margin-top:6px;text-align:center;line-height:1.3}
+.route-line{flex:1;height:2px;background:var(--line);margin-top:-19px}
+.route-line.done{background:var(--sea)}
+
+.timeline{margin-top:6px}
+.tl-item{display:flex;gap:14px;position:relative;padding-bottom:22px}
+.tl-item:last-child{padding-bottom:0}
+.tl-rail{position:absolute;left:9px;top:22px;bottom:0;width:1px;background:var(--line)}
+.tl-item:last-child .tl-rail{display:none}
+.tl-dot{width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;z-index:1}
+.tl-dot.done{background:var(--sea);color:#fff}
+.tl-dot.now{background:var(--amber);color:#fff}
+.tl-dot.pending{background:#fff;border:1.5px solid var(--line);color:transparent}
+.tl-body{padding-top:1px}
+.tl-title{font-family:'Charter',sans-serif;font-size:14px;font-weight:600;color:var(--ink)}
+.tl-item.pending .tl-title{color:var(--ink-soft);font-weight:400}
+.tl-date{font-family:'Charter',sans-serif;font-size:11.5px;color:var(--ink-soft);margin-top:2px}
+
+.section-h{font-size:15px;font-weight:400;color:var(--navy);margin:28px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:18px 20px}
+.detail-item .k{font-family:'Charter',sans-serif;font-size:10.5px;color:var(--ink-soft);margin-bottom:3px}
+.detail-item .v{font-size:14px}
+.detail-item .v.mono{font-size:13px}
+
+.doc-list{display:flex;flex-direction:column;gap:8px}
+.doc-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--card);border:1px solid var(--line);border-radius:4px;
+  padding:13px 16px;text-decoration:none;color:var(--ink);
+}
+.doc-name{font-family:'Charter',sans-serif;font-size:13.5px}
+.doc-arrow{color:var(--ink-soft);font-size:13px}
+.doc-empty{font-family:'Charter',sans-serif;font-size:13px;color:var(--ink-soft);padding:14px 16px;background:var(--card);border:1px dashed var(--line);border-radius:4px}
+
+.contact-card{
+  background:var(--navy);color:#fff;border-radius:4px;padding:20px;margin-top:28px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.contact-h{font-family:'Charter',sans-serif;font-size:11px;color:#9aa6bb}
+.contact-name{font-size:17px}
+.contact-row{font-family:'Charter',sans-serif;font-size:13px;color:#c8cedb}
+.contact-btn{
+  margin-top:6px;background:var(--amber);color:#fff;border:none;border-radius:4px;
+  padding:11px 16px;font-family:'Charter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;
+  text-align:center;
+}
+
+footer{text-align:center;padding:24px 18px 40px;font-family:'Charter',sans-serif;font-size:11px;color:var(--ink-soft)}
+
+@media(max-width:400px){
+  .hd-title{font-size:22px}
+  .detail-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd-top">
+    <div class="hd-brand">Еколь <b>Логістікс</b></div>
+    <div class="hd-portal">КЛІЄНТСЬКИЙ КАБІНЕТ</div>
+  </div>
+  <div class="hd-title" id="hd-title">Ваш вантаж у дорозі</div>
+  <div class="hd-sub" id="hd-sub">Тут ви бачите статус кожного контейнера в реальному часі — без дзвінків менеджеру.</div>
+</header>
+
+<div class="picker">
+  <div class="picker-label">ОБЕРІТЬ ЗАМОВЛЕННЯ</div>
+  <div class="picker-row" id="picker-row"></div>
+</div>
+
+<main id="main"></main>
+
+<footer>Еколь Логістікс · Дані оновлюються автоматично · Питання — до вашого менеджера</footer>
+
+<script>
+// ── Демо-дані (у продакшн-версії тягнуться з Supabase, read-only view) ──
+var SHIPMENTS = [
+  {
+    order_id: "ZED0142",
+    client_ref: "Гарні Речі — партія взуття",
+    incoterms: "FOB",
+    origin: "Шанхай, Китай",
+    transit: "Гдиня, Польща",
+    destination: "Кропивницький, Україна",
+    container: "TCKU 345 6789",
+    stage: 3, // index into STAGES
+    eta: "12 вересня 2026",
+    manager: "Анна Богдан",
+    manager_role: "Менеджер із супроводу",
+    docs: [
+      {name: "Інвойс", url: "#"},
+      {name: "Пакувальний лист", url: "#"},
+      {name: "CMR", url: "#"}
+    ]
+  },
+  {
+    order_id: "ZED0138",
+    client_ref: "Гарні Речі — партія текстилю",
+    incoterms: "CIF",
+    origin: "Нінбо, Китай",
+    transit: "Гданськ, Польща",
+    destination: "Кропивницький, Україна",
+    container: "MSKU 118 2244",
+    stage: 5,
+    eta: "Доставлено 04 серпня 2026",
+    manager: "Анна Богдан",
+    manager_role: "Менеджер із супроводу",
+    docs: [
+      {name: "Інвойс", url: "#"},
+      {name: "Пакувальний лист", url: "#"},
+      {name: "CMR", url: "#"},
+      {name: "Митна декларація", url: "#"}
+    ]
+  },
+  {
+    order_id: "ZED0146",
+    client_ref: "Гарні Речі — партія аксесуарів",
+    incoterms: "FCA",
+    origin: "Гуанчжоу, Китай",
+    transit: "Гдиня, Польща",
+    destination: "Кропивницький, Україна",
+    container: "—  (буде присвоєно після букінгу)",
+    stage: 1,
+    eta: "Орієнтовно 28 вересня 2026",
+    manager: "Анна Богдан",
+    manager_role: "Менеджер із супроводу",
+    docs: []
+  }
+];
+
+var STAGES = [
+  {key:"accepted", title:"Замовлення прийнято", detail:"Умови погоджено, вантаж в обробці"},
+  {key:"loaded", title:"Завантажено в Китаї", detail:"Контейнер опломбовано, очікує відправлення"},
+  {key:"sea", title:"У морі", detail:"Прямує до порту призначення в Польщі"},
+  {key:"customs", title:"Митне оформлення", detail:"Документи подано, очікується розмитнення"},
+  {key:"road", title:"Автодоставка в Україну", detail:"Транспорт призначено, вантаж у дорозі"},
+  {key:"delivered", title:"Доставлено", detail:"Вантаж отримано на складі"}
+];
+
+var current = 0;
+
+function renderPicker() {
+  var html = SHIPMENTS.map(function(s, i){
+    return "<div class='chip" + (i===current?" active":"") + "' onclick='selectShipment(" + i + ")'>" + s.order_id + "</div>";
+  }).join("");
+  document.getElementById("picker-row").innerHTML = html;
+}
+
+function selectShipment(i) {
+  current = i;
+  renderPicker();
+  renderMain();
+}
+
+function routeHtml(s) {
+  var pts = [
+    {name:s.origin, done: s.stage >= 1},
+    {name:s.transit, done: s.stage >= 3},
+    {name:s.destination, done: s.stage >= 5}
+  ];
+  var html = "<div class='route'>";
+  pts.forEach(function(p, idx){
+    var isNow = (idx===0 && s.stage>=1 && s.stage<3) || (idx===1 && s.stage>=3 && s.stage<5) || (idx===2 && s.stage>=5);
+    html += "<div class='route-pt'><div class='route-dot " + (p.done?"done":"") + (isNow&&!p.done?" now":"") + "'></div><div class='route-name'>" + p.name + "</div></div>";
+    if (idx < pts.length-1) {
+      html += "<div class='route-line " + (pts[idx+1].done?"done":"") + "'></div>";
+    }
+  });
+  html += "</div>";
+  return html;
+}
+
+function timelineHtml(s) {
+  var html = "<div class='timeline'>";
+  STAGES.forEach(function(st, i){
+    var cls = i < s.stage ? "done" : (i === s.stage ? "now" : "pending");
+    var icon = cls === "done" ? "✓" : (cls === "now" ? "●" : "");
+    html += "<div class='tl-item " + cls + "'>"
+      + "<div class='tl-rail'></div>"
+      + "<div class='tl-dot " + cls + "'>" + icon + "</div>"
+      + "<div class='tl-body'>"
+      + "<div class='tl-title'>" + st.title + "</div>"
+      + "<div class='tl-date'>" + (cls==="now" ? st.detail : (cls==="done" ? "Завершено" : "Очікується")) + "</div>"
+      + "</div></div>";
+  });
+  html += "</div>";
+  return html;
+}
+
+function docsHtml(s) {
+  if (!s.docs.length) {
+    return "<div class='doc-empty'>Документи з’являться тут, щойно менеджер їх завантажить</div>";
+  }
+  return "<div class='doc-list'>" + s.docs.map(function(d){
+    return "<a class='doc-row' href='" + d.url + "' target='_blank'><span class='doc-name'>" + d.name + "</span><span class='doc-arrow'>↓</span></a>";
+  }).join("") + "</div>";
+}
+
+function renderMain() {
+  var s = SHIPMENTS[current];
+  var stageInfo = STAGES[Math.min(s.stage, STAGES.length-1)];
+
+  document.getElementById("hd-title").textContent = s.stage >= 5 ? "Вантаж доставлено" : "Ваш вантаж у дорозі";
+  document.getElementById("hd-sub").textContent = "Тут ви бачите статус кожного контейнера в реальному часі — без дзвінків менеджеру.";
+
+  var html = "";
+
+  html += "<div class='stage-card'>"
+    + "<div class='stage-eyebrow'>" + s.client_ref + "</div>"
+    + "<div class='stage-order'>Замовлення <span class='mono'>" + s.order_id + "</span> · " + s.incoterms + "</div>"
+    + "<div class='stage-now'>" + stageInfo.title + "</div>"
+    + "<div class='stage-eta'>" + (s.stage>=5 ? "" : "Очікувана дата прибуття: ") + "<b>" + s.eta + "</b></div>"
+    + routeHtml(s)
+    + "</div>";
+
+  html += "<div class='section-h'>Хронологія</div>" + timelineHtml(s);
+
+  html += "<div class='section-h'>Деталі відправлення</div>"
+    + "<div class='detail-grid'>"
+    + "<div class='detail-item'><div class='k'>КОНТЕЙНЕР</div><div class='v mono'>" + s.container + "</div></div>"
+    + "<div class='detail-item'><div class='k'>УМОВИ ПОСТАВКИ</div><div class='v'>" + s.incoterms + "</div></div>"
+    + "<div class='detail-item'><div class='k'>ВІДПРАВЛЕННЯ</div><div class='v'>" + s.origin + "</div></div>"
+    + "<div class='detail-item'><div class='k'>ПРИЗНАЧЕННЯ</div><div class='v'>" + s.destination + "</div></div>"
+    + "</div>";
+
+  html += "<div class='section-h'>Документи</div>" + docsHtml(s);
+
+  html += "<div class='contact-card'>"
+    + "<div class='contact-h'>ВАШ МЕНЕДЖЕР</div>"
+    + "<div class='contact-name'>" + s.manager + "</div>"
+    + "<div class='contact-row'>" + s.manager_role + "</div>"
+    + "<button class='contact-btn' onclick=\"window.open('mailto:zed.support@ekol.com.ua?subject=Питання по замовленню " + s.order_id + "')\">Написати менеджеру</button>"
+    + "</div>";
+
+  document.getElementById("main").innerHTML = html;
+}
+
+renderPicker();
+renderMain();
+</script>
+</body>
+</html>
