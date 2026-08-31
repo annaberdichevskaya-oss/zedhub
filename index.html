@@ -478,6 +478,7 @@ var transitDateTo = "";
 var reqSearch = "";
 var reqSort = "new";
 var reqFilter = "";
+var reqManagerFilter = "";
 var reqDateFrom = "";
 var reqDateTo = "";
 var ordSearch = "";
@@ -531,8 +532,9 @@ function renderRequests() {
     var q = reqSearch.toLowerCase();
     var matchQ = !q || r.client.toLowerCase().indexOf(q) >= 0 || r.route.toLowerCase().indexOf(q) >= 0 || (r.cargo||"").toLowerCase().indexOf(q) >= 0;
     var matchF = !reqFilter || r.status === reqFilter;
+    var matchM = !reqManagerFilter || (r.manager||"") === reqManagerFilter;
     var matchD = inDateRange(r.date, reqDateFrom, reqDateTo);
-    return matchQ && matchF && matchD;
+    return matchQ && matchF && matchM && matchD;
   });
   filtered.sort(function(a,b){
     var x = (a.req_num||""), y = (b.req_num||"");
@@ -555,6 +557,10 @@ function renderRequests() {
     + "<select class='filter-sel' onchange='reqFilter=this.value;renderRequests()'>"
     + "<option value=''>Всі статуси</option>"
     + REQ_STATUSES.map(function(s){return "<option value='" + s + "'" + (reqFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
+    + "</select>"
+    + "<select class='filter-sel' onchange='reqManagerFilter=this.value;renderRequests()'>"
+    + "<option value=''>👤 Всі менеджери</option>"
+    + MANAGERS.filter(function(m){return m!=="—";}).map(function(m){return "<option value='" + m + "'" + (reqManagerFilter===m?" selected":"") + ">" + m + "</option>";}).join("")
     + "</select>"
     + "<button class='btn btn-gray' onclick='reqSort=reqSort===\"new\"?\"old\":\"new\";renderRequests()'>" + (reqSort==="new"?"↓ Новіші":"↑ Старіші") + "</button>"
     + "<span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7280'>📅 <input type='date' class='filter-sel' style='padding:5px 8px' value='" + reqDateFrom + "' onchange='reqDateFrom=this.value;renderRequests()'> — <input type='date' class='filter-sel' style='padding:5px 8px' value='" + reqDateTo + "' onchange='reqDateTo=this.value;renderRequests()'>"
@@ -1345,8 +1351,9 @@ function exportRequestsExcel() {
     var q = reqSearch.toLowerCase();
     var matchQ = !q || r.client.toLowerCase().indexOf(q) >= 0 || r.route.toLowerCase().indexOf(q) >= 0 || (r.cargo||"").toLowerCase().indexOf(q) >= 0;
     var matchF = !reqFilter || r.status === reqFilter;
+    var matchM = !reqManagerFilter || (r.manager||"") === reqManagerFilter;
     var matchD = inDateRange(r.date, reqDateFrom, reqDateTo);
-    return matchQ && matchF && matchD;
+    return matchQ && matchF && matchM && matchD;
   }).map(function(r){
     return {
       "№ Запиту": r.req_num||"", "Дата": r.date||"", "Клієнт": r.client||"", "Контакт клієнта": r.client_contact||"", "Постачальник": r.supplier||"", "Контакт постачальника": r.contact||"",
@@ -2099,6 +2106,23 @@ function renderStatistics() {
 // ── REFERENCE (Довідник) ─────────────────────────────────────────
 var refSearch = "";
 
+function refIcon(title) {
+  var t = String(title||"").toLowerCase();
+  if (t.indexOf("митниц")>=0 || t.indexOf("брокер")>=0) return "🛃";
+  if (t.indexOf("страхов")>=0) return "🛡";
+  if (t.indexOf("банк")>=0 || t.indexOf("рахун")>=0 || t.indexOf("оплат")>=0) return "🏦";
+  if (t.indexOf("договір")>=0 || t.indexOf("контракт")>=0) return "📝";
+  if (t.indexOf("телефон")>=0 || t.indexOf("контакт")>=0 || t.indexOf("дзвін")>=0) return "📞";
+  if (t.indexOf("email")>=0 || t.indexOf("пошта")>=0 || t.indexOf("e-mail")>=0) return "📧";
+  if (t.indexOf("порт")>=0 || t.indexOf("термінал")>=0) return "⚓";
+  if (t.indexOf("склад")>=0) return "🏭";
+  if (t.indexOf("адрес")>=0 || t.indexOf("локац")>=0) return "📍";
+  if (t.indexOf("cmr")>=0 || t.indexOf("накладн")>=0 || t.indexOf("інвойс")>=0 || t.indexOf("документ")>=0) return "📄";
+  if (t.indexOf("правил")>=0 || t.indexOf("інструкц")>=0) return "📋";
+  if (t.indexOf("митна декларац")>=0 || t.indexOf("вмд")>=0) return "🧾";
+  return "📌";
+}
+
 function renderReference() {
   if (!db.references) db.references = [];
   var filtered = db.references.filter(function(x) {
@@ -2121,7 +2145,7 @@ function renderReference() {
       return "<a href='" + escQ(url) + "' target='_blank' class='ref-link'>🔗 " + escQ(l) + "</a>";
     }).join("");
     html += "<div class='ref-card'>"
-      + "<div class='ref-title'>" + escQ(x.title||"Без назви") + "</div>"
+      + "<div class='ref-title'>" + refIcon(x.title) + " " + escQ(x.title||"Без назви") + "</div>"
       + (x.text ? "<div class='ref-text'>" + escQ(x.text).replace(/\n/g,"<br>") + "</div>" : "")
       + (links ? "<div class='ref-links'>" + links + "</div>" : "")
       + "<div class='ref-actions'>"
