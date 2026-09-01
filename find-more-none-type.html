@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Море / Не вказано (тип перевезення)</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:850px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:14px;display:none}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #f3f4f6}
+th{background:#1a1a2e;color:#fff;font-size:10px;letter-spacing:.05em}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.tag-more{background:#e0f2fe;color:#0e7490}
+.tag-none{background:#f3f4f6;color:#6b7280}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔍 ZED <span>HUB</span> — тип перевезення: Море / Не вказано</h1>
+  <p>Показує ордери, де тип перевезення "Море" або взагалі порожнє. Нічого не змінює.</p>
+  <button class="btn btn-yellow" id="run-btn" onclick="run()">Показати список</button>
+  <p id="summary" style="margin-top:10px;font-weight:600"></p>
+  <table id="tbl">
+    <thead><tr><th>ORDER ID</th><th>КЛІЄНТ</th><th>КОНТЕЙНЕР</th><th>ТИП</th><th>УМОВИ</th><th>НАЦІНКА $</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};}
+function num(v){ if(v===null||v===undefined||v==="") return 0; var n=parseFloat(v); return isNaN(n)?0:n; }
+function esc(s){ return String(s||"").replace(/</g,"&lt;"); }
+
+async function run(){
+  document.getElementById("run-btn").disabled = true;
+  var res = await fetch(SUPA_BASE + "/orders?select=id,data&limit=10000", { headers: headers() });
+  var rows = await res.json();
+  var orders = Array.isArray(rows) ? rows.map(function(r){ var d=r.data||{}; d.id=r.id; return d; }) : [];
+
+  var picked = orders.filter(function(o){ return (o.type||"").trim()==="Море" || !(o.type||"").trim(); });
+  var moreCnt = picked.filter(function(o){ return (o.type||"").trim()==="Море"; }).length;
+  var noneCnt = picked.length - moreCnt;
+  var totalMarkup = picked.reduce(function(s,o){ return s + (num(o.sum_brutto)-num(o.sum_netto)) + num(o.markup_auto) + num(o.markup_local); }, 0);
+
+  document.getElementById("summary").textContent = "Море: " + moreCnt + " | Не вказано: " + noneCnt + " | Разом націнка $" + Math.round(totalMarkup).toLocaleString("uk-UA");
+
+  var tbody = document.getElementById("tbody");
+  picked.sort(function(a,b){
+    var ta=(a.type||"").trim()==="Море"?0:1, tb=(b.type||"").trim()==="Море"?0:1;
+    if (ta!==tb) return ta-tb;
+    return String(a.order_id).localeCompare(String(b.order_id), undefined, {numeric:true});
+  });
+  picked.forEach(function(o){
+    var isMore = (o.type||"").trim()==="Море";
+    var markup = (num(o.sum_brutto)-num(o.sum_netto)) + num(o.markup_auto) + num(o.markup_local);
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td><b>" + esc(o.order_id) + "</b></td><td>" + esc(o.client) + "</td><td>" + esc(o.container||"—") + "</td>"
+      + "<td><span class='tag " + (isMore?"tag-more":"tag-none") + "'>" + (isMore?"🚢 Море":"— Не вказано") + "</span></td>"
+      + "<td>" + esc(o.incoterm_code||o.incoterms||"—") + "</td><td>$ " + Math.round(markup).toLocaleString("uk-UA") + "</td>";
+    tbody.appendChild(tr);
+  });
+  document.getElementById("tbl").style.display = picked.length ? "table" : "none";
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
