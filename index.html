@@ -1956,16 +1956,20 @@ function renderStatistics() {
 
   var completeOrders = orders.filter(function(o){ return num(o.markup_auto) > 0 && num(o.markup_local) > 0; });
 
-  function avgFor(list) {
-    return list.length ? (list.reduce(function(s,o){return s+orderEarnings(o);},0) / list.length) : 0;
+  function avgOf(list, fn) {
+    return list.length ? (list.reduce(function(s,o){return s+fn(o);},0) / list.length) : 0;
   }
+  var freightOnly = function(o){ return num(o.sum_brutto) - num(o.sum_netto); };
+  var autoLocal = function(o){ return num(o.markup_auto) + num(o.markup_local); };
+  var autoOnly = function(o){ return num(o.markup_auto); };
+
   var fobComplete = orders.filter(function(o){ return classifyIncoterms(o) === "FOB"; });
   var cifComplete = orders.filter(function(o){ return classifyIncoterms(o) === "CIF"; });
   var autoComplete = orders.filter(function(o){ return classifyIncoterms(o) === "FCA"; });
   var avgByCategory = [
-    { label: "FOB", count: fobComplete.length, avg: avgFor(fobComplete), color: "#f59e0b" },
-    { label: "CIF", count: cifComplete.length, avg: avgFor(cifComplete), color: "#0e7490" },
-    { label: "АВТО", count: autoComplete.length, avg: avgFor(autoComplete), color: "#16a34a" }
+    { label: "FOB", sub: "націнка фрахта", count: fobComplete.length, avg: avgOf(fobComplete, freightOnly), full: avgOf(fobComplete, orderEarnings), color: "#f59e0b" },
+    { label: "CIF", sub: "локальні + авто", count: cifComplete.length, avg: avgOf(cifComplete, autoLocal), color: "#0e7490" },
+    { label: "FCA / АВТО", sub: "авто перевезення", count: autoComplete.length, avg: avgOf(autoComplete, autoOnly), color: "#16a34a" }
   ];
   var avgMarkup = completeOrders.length ? (completeOrders.reduce(function(s,o){ return s + orderEarnings(o); }, 0) / completeOrders.length) : 0;
   var activeClients = Object.keys(clientsSet).length;
@@ -1995,6 +1999,21 @@ function renderStatistics() {
     document.getElementById("main-content").innerHTML = html;
     return;
   }
+
+  // ── Середня націнка: FOB / CIF / FCA (компактно, без графіка) ──
+  html += "<div class='table-wrap' style='padding:14px;background:#fff;margin-bottom:12px;max-width:680px'>"
+    + "<div class='section-title' style='margin-top:0;margin-bottom:10px'>Середня націнка: FOB / CIF / FCA</div>"
+    + "<div style='display:flex;gap:24px;flex-wrap:wrap'>"
+    + avgByCategory.map(function(c){
+        var ordWord = c.count===1?"ордер":(c.count>=2&&c.count<=4?"ордери":"ордерів");
+        return "<div>"
+          + "<div style='font-size:22px;font-weight:700;color:" + c.color + "'>$ " + Math.round(c.avg).toLocaleString("uk-UA") + "</div>"
+          + "<div style='font-size:11px;color:#9ca3af'>" + c.label + " (" + c.sub + ") — " + c.count + " " + ordWord + "</div>"
+          + (c.full !== undefined ? "<div style='font-size:11px;color:#374151;margin-top:3px'>Повний ордер (фрахт+авто+локальні): <b>$ " + Math.round(c.full).toLocaleString("uk-UA") + "</b></div>" : "")
+          + "</div>";
+      }).join("")
+    + "</div>"
+    + "</div>";
 
   // ── Деталі за умовами поставки (окремо) ──
   html += "<div class='table-wrap' style='padding:14px;background:#fff;margin-bottom:12px;max-width:680px'>"
@@ -2049,19 +2068,6 @@ function renderStatistics() {
           + "<td style='padding:3px 4px;text-align:right;font-weight:700;color:#16a34a'>$ "+Math.round(c.earnings).toLocaleString("uk-UA")+"</td></tr>";
       }).join("")
     + "</tbody></table>"
-    + "</div>"
-    + "</div>";
-
-  // ── Середня націнка: FOB / CIF / АВТО (компактно, без графіка) ──
-  html += "<div class='table-wrap' style='padding:14px;background:#fff;margin-bottom:12px'>"
-    + "<div class='section-title' style='margin-top:0;margin-bottom:10px'>Середня націнка: FOB / CIF / АВТО</div>"
-    + "<div style='display:flex;gap:24px;flex-wrap:wrap'>"
-    + avgByCategory.map(function(c){
-        return "<div>"
-          + "<div style='font-size:22px;font-weight:700;color:" + c.color + "'>$ " + Math.round(c.avg).toLocaleString("uk-UA") + "</div>"
-          + "<div style='font-size:11px;color:#9ca3af'>" + c.label + " — " + c.count + " ордер" + (c.count===1?"":(c.count>=2&&c.count<=4?"и":"ів")) + "</div>"
-          + "</div>";
-      }).join("")
     + "</div>"
     + "</div>";
 
