@@ -1908,7 +1908,7 @@ function renderStatistics() {
   var orders = (db.orders || []).filter(function(o){ return inDateRange(o.date, statsDateFrom, statsDateTo); });
   var totalOrders = orders.length;
   var totalEarnings = 0;
-  var byIncoterm = { FOB: {count:0, earnings:0, netto:0, brutto:0}, CIF: {count:0, earnings:0, netto:0, brutto:0}, FCA: {count:0, earnings:0, netto:0, brutto:0}, EXW: {count:0, earnings:0, netto:0, brutto:0}, "Інше": {count:0, earnings:0, netto:0, brutto:0} };
+  var byIncoterm = { FOB: {count:0, earnings:0, netto:0, brutto:0, auto:0, local:0}, CIF: {count:0, earnings:0, netto:0, brutto:0, auto:0, local:0}, FCA: {count:0, earnings:0, netto:0, brutto:0, auto:0, local:0}, EXW: {count:0, earnings:0, netto:0, brutto:0, auto:0, local:0}, "Інше": {count:0, earnings:0, netto:0, brutto:0, auto:0, local:0} };
   var byMonth = {}; // key -> {label, sortKey, earnings, auto}
   var byClient = {}; // client -> {count, earnings}
   var byTransport = {}; // тип перевезення -> {count, earnings}
@@ -1925,6 +1925,8 @@ function renderStatistics() {
     byIncoterm[cat].earnings += earn;
     byIncoterm[cat].netto += num(o.sum_netto);
     byIncoterm[cat].brutto += num(o.sum_brutto);
+    byIncoterm[cat].auto += num(o.markup_auto);
+    byIncoterm[cat].local += num(o.markup_local);
 
     var mk = statsMonthKey(o.date);
     if (mk) {
@@ -2003,7 +2005,12 @@ function renderStatistics() {
     + ["FOB","CIF","FCA","EXW","Інше"].filter(function(k){ return byIncoterm[k].count > 0; }).map(function(k){
         var d = byIncoterm[k];
         var dot = k==="FOB" ? "#f59e0b" : (k==="CIF" ? "#0e7490" : (k==="FCA" ? "#6d28d9" : (k==="EXW" ? "#16a34a" : "#9ca3af")));
-        var avgFreight = d.count ? (d.brutto - d.netto) / d.count : 0;
+        var avgFreight = 0;
+        if (d.count) {
+          if (k === "CIF") avgFreight = (d.auto + d.local) / d.count;
+          else if (k === "FCA") avgFreight = d.auto / d.count;
+          else avgFreight = (d.brutto - d.netto) / d.count; // FOB, EXW, Інше
+        }
         return "<tr><td style='padding:6px 4px'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:"+dot+";margin-right:6px'></span>"+k+"</td>"
           + "<td style='padding:6px 4px;text-align:right'>"+d.count+"</td>"
           + "<td style='padding:6px 4px;text-align:right;color:#6b7280'>$ "+Math.round(d.netto).toLocaleString("uk-UA")+"</td>"
