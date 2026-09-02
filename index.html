@@ -1719,7 +1719,10 @@ function ubLog(msg) {
 function ubCellText(v) {
   if (v === null || v === undefined) return "";
   if (v instanceof Date) {
-    var d = v.getDate(), m = v.getMonth()+1, y = v.getFullYear();
+    // SheetJS може дати дату з мікро-похибкою (напр. 23:59:56 замість 00:00:00),
+    // через що день "з'їжджає" на попередній — округлюємо до найближчої доби
+    var rounded = new Date(Math.round(v.getTime() / 86400000) * 86400000);
+    var d = rounded.getUTCDate(), m = rounded.getUTCMonth()+1, y = rounded.getUTCFullYear();
     return (d<10?"0":"")+d+"."+(m<10?"0":"")+m+"."+y;
   }
   return String(v).trim();
