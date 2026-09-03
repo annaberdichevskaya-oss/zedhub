@@ -473,6 +473,7 @@ function restoreBackup(file) {
 // ── Current tab ──────────────────────────────────────────────────
 var currentTab = "requests";
 var transitCustomsFilter = "";
+var transitManagerFilter = "";
 var transitDateFrom = "";
 var transitDateTo = "";
 var reqSearch = "";
@@ -1580,6 +1581,7 @@ function renderTransit() {
       if (!inWin1 && !inWin2) return false;
     }
     if (transitCustomsFilter && (o.customs_status||"TBD") !== transitCustomsFilter) return false;
+    if (transitManagerFilter && (o.manager||"—") !== transitManagerFilter) return false;
     return true;
   });
   list.sort(function(a,b){
@@ -1603,6 +1605,10 @@ function renderTransit() {
     + "<select class='filter-sel' onchange='transitCustomsFilter=this.value;renderTransit()'>"
     + "<option value=''>🛃 Всі статуси митниці</option>"
     + CUSTOMS_STATUSES.map(function(s){return "<option value='" + s + "'" + (transitCustomsFilter===s?" selected":"") + ">" + s + "</option>";}).join("")
+    + "</select>"
+    + "<select class='filter-sel' onchange='transitManagerFilter=this.value;renderTransit()'>"
+    + "<option value=''>👤 Всі менеджери</option>"
+    + MANAGERS.filter(function(m){return m!=="—";}).map(function(m){return "<option value='" + m + "'" + (transitManagerFilter===m?" selected":"") + ">" + m + "</option>";}).join("")
     + "</select>"
     + "<span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7280'>📅 <input type='date' class='filter-sel' style='padding:5px 8px' value='" + transitDateFrom + "' onchange='transitDateFrom=this.value;renderTransit()'> — <input type='date' class='filter-sel' style='padding:5px 8px' value='" + transitDateTo + "' onchange='transitDateTo=this.value;renderTransit()'></span>"
     + (usingCustomRange ? "<button class='btn btn-gray' onclick='transitDateFrom=\"\";transitDateTo=\"\";renderTransit()'>Скинути період</button>" : "")
