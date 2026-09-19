@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>ZED Hub — Гарні речі, ETA з 01.09 — яких немає</title>
+<style>
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;max-width:700px;margin:30px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h1{font-size:18px}h1 span{color:#f59e0b}
+p{font-size:13px;color:#6b7280;margin-bottom:12px;line-height:1.5}
+.btn{border:none;border-radius:8px;padding:11px 20px;font-size:14px;cursor:pointer;font-weight:600;font-family:inherit}
+.btn-yellow{background:#f59e0b;color:#fff}.btn-yellow:hover{background:#d97706}
+.btn-yellow:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:14px;display:none}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #f3f4f6}
+th{background:#1a1a2e;color:#fff;font-size:10px;letter-spacing:.05em}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔍 ZED <span>HUB</span> — Гарні речі, ETA з 01.09 — яких немає</h1>
+  <p>Звіряє 33 контейнери клієнта "Гарні речі" (ETA з 01.09.2026, з файлу UB) з живою базою ZED Hub — показує ті, для яких ще немає ордера.</p>
+  <button class="btn btn-yellow" id="run-btn" onclick="run()">Перевірити</button>
+  <p id="summary" style="margin-top:10px;font-weight:600"></p>
+  <table id="tbl">
+    <thead><tr><th>КОНТЕЙНЕР (з файлу UB)</th><th>ETA (з файлу)</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+var SUPA_BASE = "https://wwovdtlnecmatenbpttc.supabase.co/rest/v1";
+var SUPA_KEY = "sb_publishable_y4t6yXoSShZPBecPAHDVYw_wuwATq0W";
+var LIST = [{"container": "TIIU7662641", "eta": "02.09.2026"}, {"container": "SEKU5919200", "eta": "02.09.2026"}, {"container": "ECMU8082954", "eta": "02.09.2026"}, {"container": "UETU8679733", "eta": "04.09.2026"}, {"container": "CXDU2029597", "eta": "05.09.2026"}, {"container": "CXDU2211641", "eta": "05.09.2026"}, {"container": "CSNU9536798", "eta": "07.09.2026"}, {"container": "EGSU8025418", "eta": "07.09.2026"}, {"container": "OOLU5395596", "eta": "07.09.2026"}, {"container": "EGSU6291851", "eta": "07.09.2026"}, {"container": "BMOU5418443", "eta": "07.09.2026"}, {"container": "APHU7237768", "eta": "07.09.2026"}, {"container": "EITU1613130", "eta": "08.09.2026"}, {"container": "FSCU5360570", "eta": "08.09.2026"}, {"container": "MSMU5972568", "eta": "16.09.2026"}, {"container": "MSMU8321934", "eta": "16.09.2026"}, {"container": "BEAU6301544", "eta": "17.09.2026"}, {"container": "SEKU4631899", "eta": "17.09.2026"}, {"container": "BMOU5650470", "eta": "20.09.2026"}, {"container": "DRYU4566025", "eta": "20.09.2026"}, {"container": "ECMU6267835", "eta": "20.09.2026"}, {"container": "TRHU8288417", "eta": "21.09.2026"}, {"container": "FFAU4466896", "eta": "21.09.2026"}, {"container": "CMAU8817497", "eta": "21.09.2026"}, {"container": "CMAU9186293", "eta": "21.09.2026"}, {"container": "APHU7325283", "eta": "22.09.2026"}, {"container": "OOLU6877313", "eta": "24.09.2026"}, {"container": "UETU6930747", "eta": "28.09.2026"}, {"container": "TRHU4139800", "eta": "29.09.2026"}, {"container": "BSIU5002317", "eta": "29.09.2026"}, {"container": "HASU1395051", "eta": "08.10.2026"}, {"container": "OOCU0226832", "eta": "12.10.2026"}, {"container": "CAAU2793324", "eta": "27.10.2026"}];
+function headers(){return {"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY};}
+function esc(s){ return String(s||"").replace(/</g,"&lt;"); }
+function norm(s){ return String(s||"").trim().toUpperCase(); }
+
+async function run(){
+  document.getElementById("run-btn").disabled = true;
+  var res = await fetch(SUPA_BASE + "/orders?select=id,data&limit=10000", { headers: headers() });
+  var rows = await res.json();
+  var orders = Array.isArray(rows) ? rows.map(function(r){ var d=r.data||{}; d.id=r.id; return d; }) : [];
+
+  var existing = {};
+  orders.forEach(function(o){ if (o.container) existing[norm(o.container)] = o; });
+
+  var missing = LIST.filter(function(c){ return !existing[norm(c.container)]; });
+
+  document.getElementById("summary").textContent = "З " + LIST.length + " контейнерів у файлі UB — немає в ZED Hub: " + missing.length + " | Вже є: " + (LIST.length - missing.length);
+
+  var tbody = document.getElementById("tbody");
+  missing.forEach(function(c){
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td><b>" + esc(c.container) + "</b></td><td>" + esc(c.eta) + "</td>";
+    tbody.appendChild(tr);
+  });
+  document.getElementById("tbl").style.display = missing.length ? "table" : "none";
+  document.getElementById("run-btn").disabled = false;
+}
+</script>
+</body>
+</html>
